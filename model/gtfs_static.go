@@ -8,6 +8,9 @@ import (
 )
 
 // See https://gtfs.org/schedule/reference for reference
+// This model is meant to be a direct copy of the GTFS reference schema,
+// except that each entity has a Version tag. This allows us to keep multiple versions
+// of a given GTFS schema in the same SQL tables
 
 type RouteType int8
 
@@ -76,17 +79,21 @@ const (
 )
 
 type Agency struct {
-	Id       string `csv_parse:"agency_id" gorm:"unique;primaryKey;not null;default:null"`
-	Name     string `csv_parse:"agency_name" gorm:"default:null"`
-	Url      string `csv_parse:"agency_url" gorm:"default:null"`
-	Timezone string `csv_parse:"agency_timezone" gorm:"default:null"`
-	Language string `csv_parse:"agency_lang" gorm:"default:null"`
-	Phone    string `csv_parse:"agency_phone" gorm:"default:null"`
-	FareUrl  string `csv_parse:"agency_fare_url" gorm:"default:null"`
-	Email    string `csv_parse:"agency_email" gorm:"default:null"`
+	Version  string    `gorm:"primaryKey;not null;default:null"`
+	FeedInfo *FeedInfo `gorm:"foreignKey:Version;belongsTo"`
+	Id       string    `csv_parse:"agency_id" gorm:"unique;primaryKey;not null;default:null"`
+	Name     string    `csv_parse:"agency_name" gorm:"default:null"`
+	Url      string    `csv_parse:"agency_url" gorm:"default:null"`
+	Timezone string    `csv_parse:"agency_timezone" gorm:"default:null"`
+	Language string    `csv_parse:"agency_lang" gorm:"default:null"`
+	Phone    string    `csv_parse:"agency_phone" gorm:"default:null"`
+	FareUrl  string    `csv_parse:"agency_fare_url" gorm:"default:null"`
+	Email    string    `csv_parse:"agency_email" gorm:"default:null"`
 }
 
 type Stop struct {
+	Version            string       `gorm:"primaryKey;not null;default:null"`
+	FeedInfo           *FeedInfo    `gorm:"foreignKey:Version;belongsTo"`
 	Id                 string       `csv_parse:"stop_id" gorm:"unique;primaryKey;not null;default:null"`
 	Code               string       `csv_parse:"stop_code" gorm:"default:null"`
 	Name               string       `csv_parse:"stop_name" gorm:"default:null"`
@@ -104,6 +111,8 @@ type Stop struct {
 }
 
 type Route struct {
+	Version           string                  `gorm:"primaryKey;not null;default:null"`
+	FeedInfo          *FeedInfo               `gorm:"foreignKey:Version;belongsTo"`
 	Id                string                  `csv_parse:"route_id" gorm:"unique;primaryKey;not null;default:null"`
 	AgencyId          string                  `csv_parse:"agency_id" gorm:"default:null"`
 	ShortName         string                  `csv_parse:"route_short_name" gorm:"default:null"`
@@ -120,8 +129,11 @@ type Route struct {
 }
 
 type Trip struct {
-	Id                   string               `csv_parse:"trip_id" gorm:"unique;primaryKey;not null;default:null"`
-	RouteId              string               `csv_parse:"route_id"`
+	Version              string    `gorm:"primaryKey;not null;default:null"`
+	FeedInfo             *FeedInfo `gorm:"foreignKey:Version;belongsTo"`
+	Id                   string    `csv_parse:"trip_id" gorm:"unique;primaryKey;not null;default:null"`
+	RouteId              string    `csv_parse:"route_id"`
+	Route                *Route
 	ServiceId            string               `csv_parse:"service_id" gorm:"default: null"`
 	Headsign             string               `csv_parse:"trip_headsign" gorm:"default: null"`
 	ShortName            string               `csv_parse:"trip_short_name" gorm:"default: null"`
@@ -169,10 +181,14 @@ func (custom *ArrivalDepartureTime) ConvertFromCsv(input string) error {
 }
 
 type StopTime struct {
+	Version          string                  `gorm:"primaryKey;not null;default:null"`
+	FeedInfo         *FeedInfo               `gorm:"foreignKey:Version;belongsTo"`
 	TripId           string                  `csv_parse:"trip_id" gorm:"primaryKey;not null;default:null"`
+	Trip             *Trip                   `gorm:"foreignKey:trip_id"`
 	ArrivalTime      ArrivalDepartureTime    `csv_parse:"arrival_time" gorm:"default:null"`
 	DepartureTime    ArrivalDepartureTime    `csv_parse:"departure_time" gorm:"default:null"`
 	StopId           string                  `csv_parse:"stop_id" gorm:"not null;default:null"`
+	Stop             *Stop                   `gorm:"foreignKey:stop_id"`
 	StopSequence     int32                   `csv_parse:"stop_sequence" gorm:"primaryKey;not null;default:null"`
 	StopHeadsign     string                  `csv_parse:"stop_headsign" gorm:"default:null"`
 	PickupType       PickupDropoffType       `csv_parse:"pickup_type;default:0"`
@@ -188,6 +204,8 @@ const (
 )
 
 type Calendar struct {
+	Version   string           `gorm:"primaryKey;not null;default:null"`
+	FeedInfo  *FeedInfo        `gorm:"foreignKey:Version;belongsTo"`
 	ServiceId string           `csv_parse:"service_id" gorm:"primaryKey;not null;default:null"`
 	Monday    ServiceAvailable `csv_parse:"monday" gorm:"not null"`
 	Tuesday   ServiceAvailable `csv_parse:"tuesday" gorm:"not null"`

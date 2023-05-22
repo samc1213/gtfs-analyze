@@ -1,0 +1,5 @@
+build/
+# Any go files generated from protobuf should not be included
+**.pb.go
+# Mac files
+**.DS_Store

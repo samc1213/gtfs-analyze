@@ -1,6 +1,8 @@
 package log
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"os"
 )
@@ -57,25 +59,25 @@ type logger struct {
 
 func (logger *logger) Debug(format string, v ...any) {
 	if logger.debug != nil {
-		logger.debug.Printf(format, v...)
+		logger.debug.Output(3, fmt.Sprintf(format, v...))
 	}
 }
 
 func (logger *logger) Info(format string, v ...any) {
 	if logger.info != nil {
-		logger.info.Printf(format, v...)
+		logger.info.Output(3, fmt.Sprintf(format, v...))
 	}
 }
 
 func (logger *logger) Warning(format string, v ...any) {
 	if logger.warning != nil {
-		logger.warning.Printf(format, v...)
+		logger.warning.Output(3, fmt.Sprintf(format, v...))
 	}
 }
 
 func (logger *logger) Error(format string, v ...any) {
 	if logger.error != nil {
-		logger.error.Printf(format, v...)
+		logger.error.Output(3, fmt.Sprintf(format, v...))
 	}
 }
 
@@ -89,4 +91,48 @@ type Interface interface {
 	Info(string, ...any)
 	Warning(string, ...any)
 	Error(string, ...any)
+}
+
+// These functions are used for the cobra CLI tool to parse user specified log level
+func (e *Level) String() string {
+	switch *e {
+	case Debug:
+		return "debug"
+	case Info:
+		return "info"
+	case Warning:
+		return "warning"
+	case Error:
+		return "error"
+	case Silent:
+		return "silent"
+	default:
+		return "unknown"
+	}
+}
+
+func (e *Level) Set(v string) error {
+	switch v {
+	case "debug":
+		*e = Debug
+		return nil
+	case "info":
+		*e = Info
+		return nil
+	case "warning":
+		*e = Warning
+		return nil
+	case "error":
+		*e = Error
+		return nil
+	case "silent":
+		*e = Silent
+		return nil
+	default:
+		return errors.New(`must be one of "debug", "info", "warning", "error" or "silent"`)
+	}
+}
+
+func (e *Level) Type() string {
+	return "log.Level"
 }

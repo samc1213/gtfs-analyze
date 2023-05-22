@@ -2,11 +2,17 @@ package core
 
 import (
 	"archive/zip"
+	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"hash"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/samc1213/gtfs-analyze/csv_parse"
@@ -24,29 +30,29 @@ func ParseStaticGtfsFromUrl(url string) (*model.GtfsStaticFeed, error) {
 		return nil, errors.New("Non-successful response from uri " + url)
 	}
 
-	tempfile, err := os.CreateTemp(os.TempDir(), "google_transit*.zip")
+	tempFile, err := os.CreateTemp(os.TempDir(), "google_transit*.zip")
 	if err != nil {
 		return nil, err
 	}
-	defer tempfile.Close()
-	defer os.Remove(tempfile.Name())
+	defer tempFile.Close()
+	defer os.Remove(tempFile.Name())
 
-	_, err = io.Copy(tempfile, resp.Body)
+	_, err = io.Copy(tempFile, resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
-	gtfsFiles, err := getGtfsFilesFromZip(tempfile.Name())
+	gtfsFiles, err := getGtfsFilesFromZip(tempFile.Name())
 	if err != nil {
 		return nil, err
 	}
-	defer gtfsFiles.CloseAll()
 
 	result, err := parseStaticGtfsFromFiles(gtfsFiles)
 
 	if err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
@@ -82,7 +88,6 @@ func ParseStaticGtfsFromPath(path string) (*model.GtfsStaticFeed, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer gtfsFiles.CloseAll()
 	}
 
 	result, err := parseStaticGtfsFromFiles(gtfsFiles)
@@ -105,20 +110,18 @@ func getGtfsFilesFromZip(path string) (*GtfsFileCollection, error) {
 		if err != nil {
 			return nil, err
 		}
+		defer readerCloser.Close()
 
-		gtfsFiles = append(gtfsFiles, GtfsFile{Name: f.Name, FileObj: readerCloser})
+		// Memory-inefficient to read all these files into memory, but simplifies
+		// downstream hashing code, which reads from the same file again (implements ReaderSeeker interface)
+		fileBytes, err := io.ReadAll(readerCloser)
+		if err != nil {
+			return nil, err
+		}
+
+		gtfsFiles = append(gtfsFiles, GtfsFile{Name: f.Name, FileObj: bytes.NewReader(fileBytes)})
 	}
 	return &GtfsFileCollection{GtfsFiles: gtfsFiles}, nil
-}
-
-func (collection *GtfsFileCollection) CloseAll() error {
-	for _, gtfsFile := range collection.GtfsFiles {
-		err := gtfsFile.FileObj.Close()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type GtfsFileCollection struct {
@@ -127,15 +130,23 @@ type GtfsFileCollection struct {
 
 type GtfsFile struct {
 	Name    string
-	FileObj io.ReadCloser
+	FileObj io.ReadSeeker
 }
 
 func parseStaticGtfsFromFiles(files *GtfsFileCollection) (*model.GtfsStaticFeed, error) {
 	var result model.GtfsStaticFeed
 
+	hash := md5.New()
+	// Sort to ensure consistent hashing for version creation
+	sort.Slice(files.GtfsFiles, func(i, j int) bool { return files.GtfsFiles[i].Name < files.GtfsFiles[j].Name })
+
 	for _, f := range files.GtfsFiles {
 		if strings.ToLower(f.Name) == "agency.txt" {
 			agencies, err := parseSingleStaticFile[model.Agency](f.FileObj)
+			if err != nil {
+				return &result, err
+			}
+			err = updateHash(hash, f.FileObj)
 			if err != nil {
 				return &result, err
 			}
@@ -146,10 +157,18 @@ func parseStaticGtfsFromFiles(files *GtfsFileCollection) (*model.GtfsStaticFeed,
 			if err != nil {
 				return &result, err
 			}
+			err = updateHash(hash, f.FileObj)
+			if err != nil {
+				return &result, err
+			}
 			result.Stop = stops
 		}
 		if strings.ToLower(f.Name) == "routes.txt" {
 			routes, err := parseSingleStaticFile[model.Route](f.FileObj)
+			if err != nil {
+				return &result, err
+			}
+			err = updateHash(hash, f.FileObj)
 			if err != nil {
 				return &result, err
 			}
@@ -160,10 +179,18 @@ func parseStaticGtfsFromFiles(files *GtfsFileCollection) (*model.GtfsStaticFeed,
 			if err != nil {
 				return &result, err
 			}
+			err = updateHash(hash, f.FileObj)
+			if err != nil {
+				return &result, err
+			}
 			result.Trip = trips
 		}
 		if strings.ToLower(f.Name) == "stop_times.txt" {
 			stopTimes, err := parseSingleStaticFile[model.StopTime](f.FileObj)
+			if err != nil {
+				return &result, err
+			}
+			err = updateHash(hash, f.FileObj)
 			if err != nil {
 				return &result, err
 			}
@@ -174,6 +201,10 @@ func parseStaticGtfsFromFiles(files *GtfsFileCollection) (*model.GtfsStaticFeed,
 			if err != nil {
 				return &result, err
 			}
+			err = updateHash(hash, f.FileObj)
+			if err != nil {
+				return &result, err
+			}
 			result.Calendar = calendars
 		}
 		if strings.ToLower(f.Name) == "feed_info.txt" {
@@ -181,14 +212,67 @@ func parseStaticGtfsFromFiles(files *GtfsFileCollection) (*model.GtfsStaticFeed,
 			if err != nil {
 				return &result, err
 			}
+			err = updateHash(hash, f.FileObj)
+			if err != nil {
+				return &result, err
+			}
 			result.FeedInfo = feedInfos
 		}
 	}
 
+	updateVersion(&result, hex.EncodeToString(hash.Sum(nil)))
+
 	return &result, nil
 }
 
-func parseSingleStaticFile[T any](path io.ReadCloser) ([]T, error) {
+// If a feed_info file with a version is not provided, use the md5 hash of the included
+// GTFS files to generate a fake FeedInfo object
+func updateVersion(feed *model.GtfsStaticFeed, hash string) error {
+	numFeedInfo := len(feed.FeedInfo)
+	if numFeedInfo > 0 {
+		if numFeedInfo != 1 {
+			return fmt.Errorf("expected exactly one feed_info.txt row. Given %d", numFeedInfo)
+		}
+		addVersionToAllObjects(feed, feed.FeedInfo[0].Version)
+	} else {
+		newFeedInfo := model.FeedInfo{Version: hash}
+		feed.FeedInfo = append(feed.FeedInfo, newFeedInfo)
+		addVersionToAllObjects(feed, hash)
+	}
+
+	return nil
+}
+
+func addVersionToAllObjects(feed *model.GtfsStaticFeed, version string) {
+	for i := range feed.Agency {
+		feed.Agency[i].Version = version
+	}
+	for i := range feed.Stop {
+		feed.Stop[i].Version = version
+	}
+	for i := range feed.Route {
+		feed.Route[i].Version = version
+	}
+	for i := range feed.Trip {
+		feed.Trip[i].Version = version
+	}
+	for i := range feed.StopTime {
+		feed.StopTime[i].Version = version
+	}
+	for i := range feed.Calendar {
+		feed.Calendar[i].Version = version
+	}
+}
+
+func updateHash(hash hash.Hash, fileObj io.ReadSeeker) error {
+	fileObj.Seek(0, io.SeekStart)
+	if _, err := io.Copy(hash, fileObj); err != nil {
+		return err
+	}
+	return nil
+}
+
+func parseSingleStaticFile[T any](path io.ReadSeeker) ([]T, error) {
 	elements := make([]T, 0)
 	recordProvider, err := csv_parse.BeginParseCsv[T](path)
 	if err != nil {
