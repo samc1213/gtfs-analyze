@@ -3,8 +3,11 @@ package cmd
 import (
 	"os"
 
+	"github.com/samc1213/gtfs-analyze/log"
 	"github.com/spf13/cobra"
 )
+
+var LogLevel log.Level = log.Error
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -25,4 +28,5 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.PersistentFlags().Var(&LogLevel, "log-level", "Level of logs to print")
 }
