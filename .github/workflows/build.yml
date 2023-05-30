@@ -16,7 +16,6 @@ jobs:
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
-
       
       - name: Generate
         run: ./gtfs_realtime/generate.sh
