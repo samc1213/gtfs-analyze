@@ -81,7 +81,7 @@ const (
 type Agency struct {
 	Version  string    `gorm:"primaryKey;not null;default:null"`
 	FeedInfo *FeedInfo `gorm:"foreignKey:Version;belongsTo"`
-	Id       string    `csv_parse:"agency_id" gorm:"unique;primaryKey;not null;default:null"`
+	Id       string    `csv_parse:"agency_id" gorm:"primaryKey;not null;default:null"`
 	Name     string    `csv_parse:"agency_name" gorm:"default:null"`
 	Url      string    `csv_parse:"agency_url" gorm:"default:null"`
 	Timezone string    `csv_parse:"agency_timezone" gorm:"default:null"`
@@ -94,7 +94,7 @@ type Agency struct {
 type Stop struct {
 	Version            string       `gorm:"primaryKey;not null;default:null"`
 	FeedInfo           *FeedInfo    `gorm:"foreignKey:Version;belongsTo"`
-	Id                 string       `csv_parse:"stop_id" gorm:"unique;primaryKey;not null;default:null"`
+	Id                 string       `csv_parse:"stop_id" gorm:"primaryKey;not null;default:null"`
 	Code               string       `csv_parse:"stop_code" gorm:"default:null"`
 	Name               string       `csv_parse:"stop_name" gorm:"default:null"`
 	TtsName            string       `csv_parse:"tts_stop_name" gorm:"default:null"`
@@ -113,7 +113,7 @@ type Stop struct {
 type Route struct {
 	Version           string                  `gorm:"primaryKey;not null;default:null"`
 	FeedInfo          *FeedInfo               `gorm:"foreignKey:Version;belongsTo"`
-	Id                string                  `csv_parse:"route_id" gorm:"unique;primaryKey;not null;default:null"`
+	Id                string                  `csv_parse:"route_id" gorm:"primaryKey;not null;default:null"`
 	AgencyId          string                  `csv_parse:"agency_id" gorm:"default:null"`
 	ShortName         string                  `csv_parse:"route_short_name" gorm:"default:null"`
 	LongName          string                  `csv_parse:"route_long_name" gorm:"default:null"`
@@ -131,7 +131,7 @@ type Route struct {
 type Trip struct {
 	Version              string    `gorm:"primaryKey;not null;default:null"`
 	FeedInfo             *FeedInfo `gorm:"foreignKey:Version;belongsTo"`
-	Id                   string    `csv_parse:"trip_id" gorm:"unique;primaryKey;not null;default:null"`
+	Id                   string    `csv_parse:"trip_id" gorm:"primaryKey;not null;default:null"`
 	RouteId              string    `csv_parse:"route_id"`
 	Route                *Route
 	ServiceId            string               `csv_parse:"service_id" gorm:"default: null"`
@@ -155,6 +155,9 @@ const MINUTES_TO_SECONDS = 60
 // after midnight on the date in question. Since it's hard to store time like this,
 // we convert the time to the time in seconds after migdnight
 func (custom *ArrivalDepartureTime) ConvertFromCsv(input string) error {
+	if input == "" {
+		return nil
+	}
 	re2 := regexp.MustCompile(`(?P<hour>[0-9]{2})\:(?P<minute>[0-9]{2})\:(?P<second>[0-9]{2})`)
 	matches := re2.FindStringSubmatch(input)
 	if len(matches) != 4 {
@@ -252,5 +255,6 @@ func GetAllModels() []interface{} {
 		&StopTime{},
 		&Calendar{},
 		&FeedInfo{},
+		&VehiclePosition{},
 	}
 }

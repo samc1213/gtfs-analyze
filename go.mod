@@ -9,6 +9,8 @@ require (
 	gorm.io/gorm v1.25.1
 )
 
+require google.golang.org/protobuf v1.26.0
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

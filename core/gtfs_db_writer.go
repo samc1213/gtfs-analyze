@@ -95,3 +95,39 @@ func WriteStaticGtfsFeedToDatabase(feed *model.GtfsStaticFeed, db *gorm.DB) erro
 		return nil
 	})
 }
+
+func WriteRealTimePositionUpdateToDatabase(positionUpdates []model.VehiclePosition, db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, positionUpdate := range positionUpdates {
+			// Save won't fail if there is a Primary Key conflict
+			result := tx.Save(&positionUpdate)
+			if result.Error != nil {
+				return result.Error
+			}
+		}
+
+		return nil
+	})
+}
+
+type LatestRtUpdateTracker struct {
+	latestVehiclePositionTimestamp uint64
+}
+
+func (tracker *LatestRtUpdateTracker) ShouldProcessMessage(vehiclePositionTimestamp uint64) bool {
+	if vehiclePositionTimestamp > tracker.latestVehiclePositionTimestamp {
+		tracker.latestVehiclePositionTimestamp = vehiclePositionTimestamp
+		return true
+	}
+
+	return false
+}
+
+func NewUpdateTracker(db *gorm.DB) (*LatestRtUpdateTracker, error) {
+	var vehiclePosition model.VehiclePosition
+	tx := db.Order("message_timestamp DESC").First(&vehiclePosition)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	return &LatestRtUpdateTracker{latestVehiclePositionTimestamp: vehiclePosition.MessageTimestamp}, nil
+}

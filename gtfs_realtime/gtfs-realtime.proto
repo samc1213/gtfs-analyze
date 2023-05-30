@@ -24,7 +24,6 @@
 
 syntax = "proto2";
 option java_package = "com.google.transit.realtime";
-option go_package = "github.com/samc1213/gtfs-analyze/gtfs_realtime";
 package transit_realtime;
 
 // The contents of a feed message.

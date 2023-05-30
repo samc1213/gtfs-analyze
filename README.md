@@ -5,10 +5,10 @@ gtfs-analyze is a command line tool to analyze General Transit Feed Specificatio
 Right now, `gtfs-analyze` only has one command: `store`. Use it like this:
 
 ```bash
-$ gtfs-analyze --log-level info store --db-path ~/Downloads/rtd.db --static-url https://www.rtd-denver.com/files/gtfs/google_transit.zip
+$ gtfs-analyze --log-level info store --db-path ~/Downloads/rtd.db --static-url https://www.rtd-denver.com/files/gtfs/google_transit.zip --vehicle-pos-url https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb
 ```
 
-This will download the static GTFS dataset at the provided `static-url`, and parse it into a SQLite database at the provided `db-path`. If the dataset is already found in the database, nothing will happen. Hence, you can run this command periodically to "watch" a GTFS feed, and keep all the historical data downloaded in a database.
+This will download the static GTFS dataset at the provided `static-url` and parse it into a SQLite database at the provided `db-path`. It will also download the GTFS-RT dataset at the provided `vehicle-pos-url`. If the dataset is already found in the database, nothing will happen. Hence, you can run this command to "watch" a GTFS feed, and keep all the historical data downloaded in a database. The poll intervals are configured by the `--rt-poll-interval` and `--static-poll-interval` options.
 
 For help, try `gtfs-analyze --help`.
 
