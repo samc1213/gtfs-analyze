@@ -17,13 +17,14 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
 
+      
+      - name: Generate
+        run: ./gtfs_realtime/generate.sh
+
       - name: Go mod tidy check
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum
-
-      - name: Generate
-        run: ./gtfs_realtime/generate.sh
 
       - name: Build
         run: go build -o build/ -v ./...
