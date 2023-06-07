@@ -20,6 +20,5 @@ func TestParseRtdStatic(t *testing.T) {
 	assert.Equal(t, 1, len(staticFeed.Agency))
 	assert.Equal(t, "Regional Transportation District", staticFeed.Agency[0].Name)
 	assert.Equal(t, 19, len(staticFeed.Calendar))
-	assert.Equal(t, 1, len(staticFeed.FeedInfo))
-	assert.Equal(t, "ca084dac096878a7d8fbf6f3f7dc1203", staticFeed.FeedInfo[0].Version)
+	assert.Equal(t, "ca084dac096878a7d8fbf6f3f7dc1203", staticFeed.FeedInfo.Version)
 }
