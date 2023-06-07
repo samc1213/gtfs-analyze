@@ -231,9 +231,10 @@ type FeedInfo struct {
 	// While Version is optional, and the entire FeedInfo file is optional, this application
 	// will generate a version if it is not included in the feed, in order to track changes to
 	// the GTFS feed and save all historical versions throughout time
-	Version      string `csv_parse:"feed_version" gorm:"unique;primaryKey;not null;default:null"`
-	ContactEmail string `csv_parse:"feed_contact_email" gorm:"default:null"`
-	ContactUrl   string `csv_parse:"feed_contact_url" gorm:"default:null"`
+	Version      string    `csv_parse:"feed_version" gorm:"unique;primaryKey;not null;default:null"`
+	DownloadTime time.Time `gorm:"default:null;not null"`
+	ContactEmail string    `csv_parse:"feed_contact_email" gorm:"default:null"`
+	ContactUrl   string    `csv_parse:"feed_contact_url" gorm:"default:null"`
 }
 
 type GtfsStaticFeed struct {
@@ -243,7 +244,7 @@ type GtfsStaticFeed struct {
 	Trip     []Trip
 	StopTime []StopTime
 	Calendar []Calendar
-	FeedInfo []FeedInfo
+	FeedInfo FeedInfo
 }
 
 func GetAllModels() []interface{} {

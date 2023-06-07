@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	stdlog "log"
 	"os"
 
@@ -85,11 +86,9 @@ func WriteStaticGtfsFeedToDatabase(feed *model.GtfsStaticFeed, db *gorm.DB) erro
 				return result.Error
 			}
 		}
-		for _, feedInfo := range feed.FeedInfo {
-			result := tx.Create(&feedInfo)
-			if result.Error != nil {
-				return result.Error
-			}
+		result := tx.Create(&feed.FeedInfo)
+		if result.Error != nil {
+			return result.Error
 		}
 
 		return nil
@@ -126,7 +125,7 @@ func (tracker *LatestRtUpdateTracker) ShouldProcessMessage(vehiclePositionTimest
 func NewUpdateTracker(db *gorm.DB) (*LatestRtUpdateTracker, error) {
 	var vehiclePosition model.VehiclePosition
 	tx := db.Order("message_timestamp DESC").First(&vehiclePosition)
-	if tx.Error != nil {
+	if tx.Error != nil && !errors.Is(tx.Error, gorm.ErrRecordNotFound) {
 		return nil, tx.Error
 	}
 	return &LatestRtUpdateTracker{latestVehiclePositionTimestamp: vehiclePosition.MessageTimestamp}, nil

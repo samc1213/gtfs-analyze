@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/samc1213/gtfs-analyze/log"
@@ -172,10 +171,7 @@ func initializeSqliteDb(logger log.Interface, sqliteDbPath string, logLevel log.
 }
 
 func doesFeedAlreadyExist(feed *model.GtfsStaticFeed, db *gorm.DB) (bool, error) {
-	if len(feed.FeedInfo) != 1 {
-		return true, fmt.Errorf("expected only one feedInfo. Got %d", len(feed.FeedInfo))
-	}
 	var count int64
-	result := db.Model(&model.FeedInfo{}).Where("version = ?", feed.FeedInfo[0].Version).Count(&count)
+	result := db.Model(&model.FeedInfo{}).Where("version = ?", feed.FeedInfo.Version).Count(&count)
 	return count > 0, result.Error
 }

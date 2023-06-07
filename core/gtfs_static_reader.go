@@ -6,7 +6,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"hash"
 	"io"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/samc1213/gtfs-analyze/csv_parse"
 	"github.com/samc1213/gtfs-analyze/model"
@@ -216,7 +216,12 @@ func parseStaticGtfsFromFiles(files *GtfsFileCollection) (*model.GtfsStaticFeed,
 			if err != nil {
 				return &result, err
 			}
-			result.FeedInfo = feedInfos
+
+			if len(feedInfos) > 1 {
+				return &result, errors.New("Multiple feed info rows detected. Expected 1 or 0")
+			} else if len(feedInfos) == 1 {
+				result.FeedInfo = feedInfos[0]
+			}
 		}
 	}
 
@@ -228,17 +233,15 @@ func parseStaticGtfsFromFiles(files *GtfsFileCollection) (*model.GtfsStaticFeed,
 // If a feed_info file with a version is not provided, use the md5 hash of the included
 // GTFS files to generate a fake FeedInfo object
 func updateVersion(feed *model.GtfsStaticFeed, hash string) error {
-	numFeedInfo := len(feed.FeedInfo)
-	if numFeedInfo > 0 {
-		if numFeedInfo != 1 {
-			return fmt.Errorf("expected exactly one feed_info.txt row. Given %d", numFeedInfo)
-		}
-		addVersionToAllObjects(feed, feed.FeedInfo[0].Version)
-	} else {
-		newFeedInfo := model.FeedInfo{Version: hash}
-		feed.FeedInfo = append(feed.FeedInfo, newFeedInfo)
+	var defaultFeedInfo model.FeedInfo
+	if feed.FeedInfo == defaultFeedInfo {
+		feed.FeedInfo = model.FeedInfo{Version: hash}
 		addVersionToAllObjects(feed, hash)
+	} else {
+		addVersionToAllObjects(feed, feed.FeedInfo.Version)
 	}
+
+	feed.FeedInfo.DownloadTime = time.Now()
 
 	return nil
 }
