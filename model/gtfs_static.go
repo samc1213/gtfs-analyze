@@ -183,6 +183,22 @@ func (custom *ArrivalDepartureTime) ConvertFromCsv(input string) error {
 	return nil
 }
 
+func (secondsAfterMidnight *ArrivalDepartureTime) ToTimeOnDate(date time.Time) time.Time {
+	return date.Add(time.Duration(*secondsAfterMidnight) * time.Second)
+}
+
+func NewArrivalTime(date time.Time) ArrivalDepartureTime {
+	year, month, day := date.Date()
+	var baseTime time.Time
+	// If someone just provided a time of day, subtract from 0-0-0
+	if year == 0 && month == 0 && day == 0 {
+		baseTime = time.Time{}
+	} else {
+		baseTime = time.Date(year, month, day, 0, 0, 0, 0, date.Location())
+	}
+	return ArrivalDepartureTime(date.Sub(baseTime).Seconds())
+}
+
 type StopTime struct {
 	Version          string                  `gorm:"primaryKey;not null;default:null"`
 	FeedInfo         *FeedInfo               `gorm:"foreignKey:Version;belongsTo"`

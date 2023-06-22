@@ -12,7 +12,7 @@ import (
 )
 
 func ParseRtGtfsFromUrl(vehiclePositionUrl string) ([]model.VehiclePosition, error) {
-	client := http.Client{}
+	client := http.Client{Timeout: 15 * time.Second}
 	protoBytes, err := parseProtoFromUrl(&client, vehiclePositionUrl)
 	if err != nil {
 		return nil, err
