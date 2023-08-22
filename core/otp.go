@@ -50,6 +50,36 @@ type InternalVehiclePosition struct {
 	PositionTime  time.Time
 }
 
+func CalculateOtpForTimeRange(sqliteDbPath string, startTime time.Time, endTime time.Time, onTimeThreshold time.Duration, logLevel log.Level) (*OtpSummary, error) {
+	logger := log.New(logLevel)
+
+	db, err := InitializeSqliteDatabase(sqliteDbPath, logLevel)
+	if err != nil {
+		return nil, err
+	}
+	var vehiclePositions []model.VehiclePosition
+	tx := db.Where("position_timestamp >= ? AND position_timestamp <= ?", startTime.Unix(), endTime.Unix()).Find(&vehiclePositions)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	// TODO: Need to update the static feed depending on the day we're looking at
+	year, month, day := startTime.Date()
+	feed, err := GetFeedOnDate(year, month, day, db)
+	if err != nil {
+		return nil, err
+	}
+
+	calculation, err := CreateOtpCalculation(feed)
+	if err != nil {
+		return nil, err
+	}
+
+	calculation.OnNewPositionData(vehiclePositions, logger)
+
+	return calculation.SummarizeOnTimePerformanceByTrip(onTimeThreshold, logger), nil
+}
+
 func CreateOtpCalculation(feed *model.GtfsStaticFeed) (*OtpCalculation, error) {
 	if feed == nil {
 		return nil, errors.New("must provide a non-nil feed")

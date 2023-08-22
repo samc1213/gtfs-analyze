@@ -119,3 +119,8 @@ func TestOtpSummaryPrint(t *testing.T) {
 	summary.OtpSummaries[1] = OtpSummaryEntry{Name: "trip2", OnTimePerformance: 0.993}
 	fmt.Println(summary.PrettyPrint())
 }
+
+func TestOtpTimeRange(t *testing.T) {
+	summary, _ := CalculateOtpForTimeRange("/home/sam/Downloads/rtd.db", time.Unix(1692661211, 0), time.Unix(1692662655, 0), 7*time.Minute, log.Info)
+	fmt.Println(summary.PrettyPrint())
+}

@@ -3,3 +3,4 @@ build/
 **.pb.go
 # Mac files
 **.DS_Store
+gtfs-analyze

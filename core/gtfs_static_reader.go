@@ -17,6 +17,7 @@ import (
 
 	"github.com/samc1213/gtfs-analyze/csv_parse"
 	"github.com/samc1213/gtfs-analyze/model"
+	"gorm.io/gorm"
 )
 
 func ParseStaticGtfsFromUrl(url string) (*model.GtfsStaticFeed, error) {
@@ -294,4 +295,47 @@ func parseSingleStaticFile[T any](path io.ReadSeeker) ([]T, error) {
 	}
 
 	return elements, nil
+}
+
+func GetFeedOnDate(year int, month time.Month, day int, db *gorm.DB) (*model.GtfsStaticFeed, error) {
+	var feedInfo model.FeedInfo
+	date := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	tx := db.Where("start_date <= ? and end_date >= ? and cast(download_time as date) <= ?", date, date, date).Order("download_time DESC").First(&feedInfo)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	var feed model.GtfsStaticFeed
+	feed.FeedInfo = feedInfo
+	// TODO: Put this all in the same transaction?
+	tx = db.Where("version = ?", feedInfo.Version).Find(&feed.Agency)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	tx = db.Where("version = ?", feedInfo.Version).Find(&feed.Stop)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	tx = db.Where("version = ?", feedInfo.Version).Find(&feed.Route)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	tx = db.Where("version = ?", feedInfo.Version).Find(&feed.Trip)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	tx = db.Where("version = ?", feedInfo.Version).Find(&feed.StopTime)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	tx = db.Where("version = ?", feedInfo.Version).Find(&feed.Calendar)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return &feed, nil
 }
