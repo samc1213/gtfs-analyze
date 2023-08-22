@@ -77,7 +77,7 @@ func CalculateOtpForTimeRange(sqliteDbPath string, startTime time.Time, endTime 
 
 	calculation.OnNewPositionData(vehiclePositions, logger)
 
-	return calculation.SummarizeOnTimePerformanceByTrip(onTimeThreshold, logger), nil
+	return calculation.SummarizeOnTimePerformanceByTrip(onTimeThreshold, startTime, endTime, logger), nil
 }
 
 func CreateOtpCalculation(feed *model.GtfsStaticFeed) (*OtpCalculation, error) {
@@ -187,7 +187,7 @@ func (summary *OtpSummary) PrettyPrint() string {
 // `on-time performance = # of trip stops where service on time / # of total trip stops`,
 // where "service on time" means that the service arrived at the stop within onTimeThreshold amount
 // of time
-func (calculation *OtpCalculation) SummarizeOnTimePerformanceByTrip(onTimeThreshold time.Duration, logger log.Interface) *OtpSummary {
+func (calculation *OtpCalculation) SummarizeOnTimePerformanceByTrip(onTimeThreshold time.Duration, startTime time.Time, endTime time.Time, logger log.Interface) *OtpSummary {
 	calculation.Lock.Lock()
 	defer calculation.Lock.Unlock()
 
@@ -196,19 +196,16 @@ func (calculation *OtpCalculation) SummarizeOnTimePerformanceByTrip(onTimeThresh
 
 	for _, tripIdToTrip := range calculation.TripsByDate {
 		for tripId, trip := range tripIdToTrip {
-			stopTimes, ok := calculation.EasyLookupFeed.StopTimesByTripId[tripId]
-			if !ok {
-				logger.Warning("Cannot find stop times for trip id %s. Skipping OTP by trip calculation for this trip", tripId)
-				continue
-			}
-
 			// For now we do not include trips that have not been tracked at all (could be an issue with GTFS-RT)
 			if trip.HaveStartedTracking {
-				numStopsTotalByTripId[tripId] += len(stopTimes)
 
 				for _, stopTime := range trip.StopTimes {
-					if stopTime.ActualArrivalTime.Sub(stopTime.StopTime).Abs() < onTimeThreshold.Abs() {
-						numStopsOnTimeByTripId[tripId] += 1
+					if stopTime.StopTime.After(startTime) && stopTime.StopTime.Before(endTime) {
+						numStopsTotalByTripId[tripId] += 1
+
+						if stopTime.ActualArrivalTime.Sub(stopTime.StopTime).Abs() < onTimeThreshold.Abs() {
+							numStopsOnTimeByTripId[tripId] += 1
+						}
 					}
 				}
 			}

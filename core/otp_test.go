@@ -46,20 +46,40 @@ func TestOtpSingleTrip(t *testing.T) {
 	assert.Equal(t, tripDate.Add(stopOneArrivalTime), stopOne.ActualArrivalTime)
 	assert.Equal(t, tripDate.Add(stopTwoArrivalTime), stopTwo.ActualArrivalTime)
 
-	otpByTrip := calculation.SummarizeOnTimePerformanceByTrip(8*time.Minute, logger)
+	startTime := tripDate.Add(stopOneArrivalTime).Add(-time.Hour)
+	endTime := tripDate.Add(stopTwoArrivalTime).Add(time.Hour)
+
+	otpByTrip := calculation.SummarizeOnTimePerformanceByTrip(8*time.Minute, startTime, endTime, logger)
 	assert.EqualValues(t, "TripId", otpByTrip.GroupBy)
 	assert.Contains(t, otpByTrip.OtpSummaries, OtpSummaryEntry{Name: tripOneId, OnTimePerformance: 1})
 
 	// Simulate being late at both stops on next day
 	tripDate = time.Date(2023, 6, 9, 0, 0, 0, 0, time.Local)
+
 	stopOneArrivalTime = 8*time.Hour + 40*time.Minute
 	simulateStop(tripDate, stopOneArrivalTime, tripOneId, stopOneId, calculation, logger)
 	stopTwoArrivalTime = 8*time.Hour + 55*time.Minute
 	simulateStop(tripDate, stopTwoArrivalTime, tripOneId, stopTwoId, calculation, logger)
 
-	otpByTrip = calculation.SummarizeOnTimePerformanceByTrip(8*time.Minute, logger)
+	endTime = tripDate.Add(stopTwoArrivalTime).Add(time.Hour)
+	otpByTrip = calculation.SummarizeOnTimePerformanceByTrip(8*time.Minute, startTime, endTime, logger)
 	assert.EqualValues(t, "TripId", otpByTrip.GroupBy)
 	assert.Contains(t, otpByTrip.OtpSummaries, OtpSummaryEntry{Name: tripOneId, OnTimePerformance: 0.5})
+}
+
+// If we filter the time range to only surround stop 1, the OTP should be wholly based on stop 1's timeliness (100%)
+func TestOtpStopsOutsideTimeRange(t *testing.T) {
+	feed, tripOneId, stopOneId, _, tripDate := createStaticFeed()
+	calculation, err := CreateOtpCalculation(feed)
+	assert.NoError(t, err)
+	logger := log.New(log.Info)
+	stopOneTime := 8*time.Hour + 30*time.Minute
+	// Stop stop one at 8:00
+	simulateStop(tripDate, stopOneTime, tripOneId, stopOneId, calculation, logger)
+	startTime := tripDate.Add(stopOneTime).Add(-5 * time.Minute)
+	endTime := tripDate.Add(stopOneTime).Add(5 * time.Minute)
+	otp := calculation.SummarizeOnTimePerformanceByTrip(7*time.Minute, startTime, endTime, logger)
+	assert.EqualValues(t, 1, otp.OtpSummaries[0].OnTimePerformance)
 }
 
 func createStaticFeed() (*model.GtfsStaticFeed, string, string, string, time.Time) {
@@ -120,7 +140,8 @@ func TestOtpSummaryPrint(t *testing.T) {
 	fmt.Println(summary.PrettyPrint())
 }
 
-func TestOtpTimeRange(t *testing.T) {
-	summary, _ := CalculateOtpForTimeRange("/home/sam/Downloads/rtd.db", time.Unix(1692661211, 0), time.Unix(1692662655, 0), 7*time.Minute, log.Info)
-	fmt.Println(summary.PrettyPrint())
-}
+// Integration Test - do not run
+// func TestOtpTimeRange(t *testing.T) {
+// 	summary, _ := CalculateOtpForTimeRange("/home/sam/Downloads/rtd.db", time.Unix(1692661211, 0), time.Unix(1692662655, 0), 7*time.Minute, log.Info)
+// 	fmt.Println(summary.PrettyPrint())
+// }
