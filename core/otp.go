@@ -52,6 +52,7 @@ type InternalVehiclePosition struct {
 
 func CalculateOtpForTimeRange(sqliteDbPath string, startTime time.Time, endTime time.Time, onTimeThreshold time.Duration, logLevel log.Level) (*OtpSummary, error) {
 	logger := log.New(logLevel)
+	logger.Debug("Caluclating Otp for time range %s to %s with threshold %s", startTime.String(), endTime.String(), onTimeThreshold.String())
 
 	db, err := InitializeSqliteDatabase(sqliteDbPath, logLevel)
 	if err != nil {
@@ -62,6 +63,8 @@ func CalculateOtpForTimeRange(sqliteDbPath string, startTime time.Time, endTime 
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
+
+	logger.Debug("Found %d VechilePosition updates", len(vehiclePositions))
 
 	// TODO: Need to update the static feed depending on the day we're looking at
 	year, month, day := startTime.Date()
@@ -198,7 +201,6 @@ func (calculation *OtpCalculation) SummarizeOnTimePerformanceByTrip(onTimeThresh
 		for tripId, trip := range tripIdToTrip {
 			// For now we do not include trips that have not been tracked at all (could be an issue with GTFS-RT)
 			if trip.HaveStartedTracking {
-
 				for _, stopTime := range trip.StopTimes {
 					if stopTime.StopTime.After(startTime) && stopTime.StopTime.Before(endTime) {
 						numStopsTotalByTripId[tripId] += 1

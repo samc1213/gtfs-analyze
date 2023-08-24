@@ -219,7 +219,7 @@ func parseStaticGtfsFromFiles(files *GtfsFileCollection) (*model.GtfsStaticFeed,
 			}
 
 			if len(feedInfos) > 1 {
-				return &result, errors.New("Multiple feed info rows detected. Expected 1 or 0")
+				return &result, errors.New("multiple feed info rows detected. Expected 1 or 0")
 			} else if len(feedInfos) == 1 {
 				result.FeedInfo = feedInfos[0]
 			}
