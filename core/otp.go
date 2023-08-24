@@ -40,6 +40,7 @@ type OtpCalculation struct {
 	TripsByDate    map[time.Time]map[string]*InternalTrip
 	Feed           *model.GtfsStaticFeed
 	EasyLookupFeed *EasyLookupFeed
+	Location       *time.Location
 	Lock           sync.Mutex
 }
 
@@ -104,7 +105,16 @@ func CreateOtpCalculation(feed *model.GtfsStaticFeed) (*OtpCalculation, error) {
 		})
 	}
 
-	return &OtpCalculation{Feed: feed, EasyLookupFeed: &easyLookup, TripsByDate: make(map[time.Time]map[string]*InternalTrip)}, nil
+	if len(feed.Agency) < 1 {
+		return nil, errors.New("cannot lookup agency timezone")
+	}
+
+	location, err := time.LoadLocation(feed.Agency[0].Timezone)
+	if err != nil {
+		return nil, err
+	}
+
+	return &OtpCalculation{Feed: feed, EasyLookupFeed: &easyLookup, TripsByDate: make(map[time.Time]map[string]*InternalTrip), Location: location}, nil
 }
 
 func (calculation *OtpCalculation) populateTripsForDate(date time.Time, logger log.Interface) {
@@ -236,7 +246,7 @@ func (calculation *OtpCalculation) onNewPositionData(positionData []InternalVehi
 
 	for _, position := range positionData {
 		year, month, day := position.PositionTime.Date()
-		date := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+		date := time.Date(year, month, day, 0, 0, 0, 0, calculation.Location)
 		tripsByTripId, ok := calculation.TripsByDate[date]
 		if !ok {
 			calculation.populateTripsForDate(date, logger)
