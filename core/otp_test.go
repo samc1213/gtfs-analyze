@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samc1213/gtfs-analyze/infra"
 	"github.com/samc1213/gtfs-analyze/log"
 	"github.com/samc1213/gtfs-analyze/model"
 	"github.com/stretchr/testify/assert"
@@ -20,13 +21,14 @@ func TestOtpSingleTrip(t *testing.T) {
 	calculation, err := CreateOtpCalculation(feed)
 	assert.NoError(t, err)
 	logger := log.New(log.Info)
-	simulateInTransitToStop(tripDate, 8*time.Hour, tripOneId, stopOneId, calculation, logger)
+	tripDateInLocation := time.Date(tripDate.Year, tripDate.Month, tripDate.Day, 0, 0, 0, 0, calculation.Location)
+	simulateInTransitToStop(tripDateInLocation, 8*time.Hour, tripOneId, stopOneId, calculation, logger)
 	stopOne := &calculation.TripsByDate[tripDate][tripOneId].StopTimes[0]
 	stopTwo := &calculation.TripsByDate[tripDate][tripOneId].StopTimes[1]
 	assert.Equal(t, stopOneId, stopOne.StopId)
 	assert.Equal(t, stopTwoId, stopTwo.StopId)
-	assert.Equal(t, tripDate.Add(8*time.Hour+30*time.Minute), stopOne.StopTime)
-	assert.Equal(t, tripDate.Add(8*time.Hour+45*time.Minute), stopTwo.StopTime)
+	assert.Equal(t, tripDateInLocation.Add(8*time.Hour+30*time.Minute), stopOne.StopTime)
+	assert.Equal(t, tripDateInLocation.Add(8*time.Hour+45*time.Minute), stopTwo.StopTime)
 
 	// Haven't gotten to stop one yet
 	assert.Zero(t, stopOne.ActualArrivalTime)
@@ -34,34 +36,35 @@ func TestOtpSingleTrip(t *testing.T) {
 
 	// At stop one at 8:32
 	stopOneArrivalTime := 8*time.Hour + 32*time.Minute
-	simulateStop(tripDate, stopOneArrivalTime, tripOneId, stopOneId, calculation, logger)
+	simulateStop(tripDateInLocation, stopOneArrivalTime, tripOneId, stopOneId, calculation, logger)
 
-	assert.Equal(t, tripDate.Add(stopOneArrivalTime), stopOne.ActualArrivalTime)
+	assert.Equal(t, tripDateInLocation.Add(stopOneArrivalTime), stopOne.ActualArrivalTime)
 	assert.Zero(t, stopTwo.ActualArrivalTime)
 
 	// At stop two at 8:44
 	stopTwoArrivalTime := 8*time.Hour + 44*time.Minute
-	simulateStop(tripDate, stopTwoArrivalTime, tripOneId, stopTwoId, calculation, logger)
+	simulateStop(tripDateInLocation, stopTwoArrivalTime, tripOneId, stopTwoId, calculation, logger)
 
-	assert.Equal(t, tripDate.Add(stopOneArrivalTime), stopOne.ActualArrivalTime)
-	assert.Equal(t, tripDate.Add(stopTwoArrivalTime), stopTwo.ActualArrivalTime)
+	assert.Equal(t, tripDateInLocation.Add(stopOneArrivalTime), stopOne.ActualArrivalTime)
+	assert.Equal(t, tripDateInLocation.Add(stopTwoArrivalTime), stopTwo.ActualArrivalTime)
 
-	startTime := tripDate.Add(stopOneArrivalTime).Add(-time.Hour)
-	endTime := tripDate.Add(stopTwoArrivalTime).Add(time.Hour)
+	startTime := tripDateInLocation.Add(stopOneArrivalTime).Add(-time.Hour)
+	endTime := tripDateInLocation.Add(stopTwoArrivalTime).Add(time.Hour)
 
 	otpByTrip := calculation.SummarizeOnTimePerformanceByTrip(8*time.Minute, startTime, endTime, logger)
 	assert.EqualValues(t, "TripId", otpByTrip.GroupBy)
 	assert.Contains(t, otpByTrip.OtpSummaries, OtpSummaryEntry{Name: tripOneId, OnTimePerformance: 1})
 
 	// Simulate being late at both stops on next day
-	tripDate = time.Date(2023, 6, 9, 0, 0, 0, 0, time.Local)
+	tripDate = infra.Date{Year: 2023, Month: 6, Day: 9}
+	tripDateInLocation = time.Date(tripDate.Year, tripDate.Month, tripDate.Day, 0, 0, 0, 0, calculation.Location)
 
 	stopOneArrivalTime = 8*time.Hour + 40*time.Minute
-	simulateStop(tripDate, stopOneArrivalTime, tripOneId, stopOneId, calculation, logger)
+	simulateStop(tripDateInLocation, stopOneArrivalTime, tripOneId, stopOneId, calculation, logger)
 	stopTwoArrivalTime = 8*time.Hour + 55*time.Minute
-	simulateStop(tripDate, stopTwoArrivalTime, tripOneId, stopTwoId, calculation, logger)
+	simulateStop(tripDateInLocation, stopTwoArrivalTime, tripOneId, stopTwoId, calculation, logger)
 
-	endTime = tripDate.Add(stopTwoArrivalTime).Add(time.Hour)
+	endTime = tripDateInLocation.Add(stopTwoArrivalTime).Add(time.Hour)
 	otpByTrip = calculation.SummarizeOnTimePerformanceByTrip(8*time.Minute, startTime, endTime, logger)
 	assert.EqualValues(t, "TripId", otpByTrip.GroupBy)
 	assert.Contains(t, otpByTrip.OtpSummaries, OtpSummaryEntry{Name: tripOneId, OnTimePerformance: 0.5})
@@ -71,19 +74,22 @@ func TestOtpSingleTrip(t *testing.T) {
 func TestOtpStopsOutsideTimeRange(t *testing.T) {
 	feed, tripOneId, stopOneId, _, tripDate := createStaticFeed()
 	calculation, err := CreateOtpCalculation(feed)
+	tripDateInLocation := time.Date(tripDate.Year, tripDate.Month, tripDate.Day, 0, 0, 0, 0, calculation.Location)
 	assert.NoError(t, err)
 	logger := log.New(log.Info)
 	stopOneTime := 8*time.Hour + 30*time.Minute
 	// Stop stop one at 8:00
-	simulateStop(tripDate, stopOneTime, tripOneId, stopOneId, calculation, logger)
-	startTime := tripDate.Add(stopOneTime).Add(-5 * time.Minute)
-	endTime := tripDate.Add(stopOneTime).Add(5 * time.Minute)
+	simulateStop(tripDateInLocation, stopOneTime, tripOneId, stopOneId, calculation, logger)
+	startTime := tripDateInLocation.Add(stopOneTime).Add(-5 * time.Minute)
+	endTime := tripDateInLocation.Add(stopOneTime).Add(5 * time.Minute)
 	otp := calculation.SummarizeOnTimePerformanceByTrip(7*time.Minute, startTime, endTime, logger)
 	assert.EqualValues(t, 1, otp.OtpSummaries[0].OnTimePerformance)
 }
 
-func createStaticFeed() (*model.GtfsStaticFeed, string, string, string, time.Time) {
+func createStaticFeed() (*model.GtfsStaticFeed, string, string, string, infra.Date) {
 	feed := model.GtfsStaticFeed{}
+	timeZone := "America/Denver"
+	feed.Agency = append(feed.Agency, model.Agency{Timezone: timeZone})
 	weekdayServiceId := "wkdayService"
 	weekdayCalendar := model.Calendar{Monday: model.ServiceIsAvailable,
 		Tuesday:   model.ServiceIsAvailable,
@@ -102,7 +108,7 @@ func createStaticFeed() (*model.GtfsStaticFeed, string, string, string, time.Tim
 	feed.Trip = append(feed.Trip, tripOne)
 	stopOneId := "stop1"
 	stopTwoId := "stop2"
-	tripDate := time.Date(2023, 6, 8, 0, 0, 0, 0, time.Local)
+	tripDate := infra.Date{Year: 2023, Month: 6, Day: 8}
 	tripOneStopOneArrivalTime := model.NewArrivalTime(time.Time{}.Add(8*time.Hour + 30*time.Minute))
 	tripOneStopOne := model.StopTime{TripId: tripOneId,
 		StopId:      stopOneId,

@@ -9,15 +9,10 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/samc1213/gtfs-analyze/infra"
 	"github.com/samc1213/gtfs-analyze/log"
 	"github.com/samc1213/gtfs-analyze/model"
 )
-
-type Date struct {
-	Year  int
-	Month time.Month
-	Day   int
-}
 
 type InternalStopTime struct {
 	StopId            string
@@ -37,7 +32,7 @@ type EasyLookupFeed struct {
 }
 
 type OtpCalculation struct {
-	TripsByDate    map[time.Time]map[string]*InternalTrip
+	TripsByDate    map[infra.Date]map[string]*InternalTrip
 	Feed           *model.GtfsStaticFeed
 	EasyLookupFeed *EasyLookupFeed
 	Location       *time.Location
@@ -114,10 +109,10 @@ func CreateOtpCalculation(feed *model.GtfsStaticFeed) (*OtpCalculation, error) {
 		return nil, err
 	}
 
-	return &OtpCalculation{Feed: feed, EasyLookupFeed: &easyLookup, TripsByDate: make(map[time.Time]map[string]*InternalTrip), Location: location}, nil
+	return &OtpCalculation{Feed: feed, EasyLookupFeed: &easyLookup, TripsByDate: make(map[infra.Date]map[string]*InternalTrip), Location: location}, nil
 }
 
-func (calculation *OtpCalculation) populateTripsForDate(date time.Time, logger log.Interface) {
+func (calculation *OtpCalculation) populateTripsForDate(date infra.Date, logger log.Interface) {
 	for _, trip := range calculation.Feed.Trip {
 		calendar, ok := calculation.EasyLookupFeed.CalendarByServiceId[trip.ServiceId]
 		if !ok {
@@ -135,7 +130,7 @@ func (calculation *OtpCalculation) populateTripsForDate(date time.Time, logger l
 				stopTime := stopTimes[stopTimeIdx]
 				internalStopTimes[stopTimeIdx] = InternalStopTime{
 					StopId:   stopTime.StopId,
-					StopTime: stopTime.ArrivalTime.ToTimeOnDate(date),
+					StopTime: time.Date(date.Year, date.Month, date.Day, 0, 0, 0, 0, calculation.Location).Add(time.Duration(*&stopTime.ArrivalTime) * time.Second),
 				}
 			}
 			tripsForDate := calculation.TripsByDate[date]
@@ -148,7 +143,7 @@ func (calculation *OtpCalculation) populateTripsForDate(date time.Time, logger l
 	}
 }
 
-func doesTripRunOnDate(date time.Time, calendar *model.Calendar) bool {
+func doesTripRunOnDate(date infra.Date, calendar *model.Calendar) bool {
 	switch date.Weekday() {
 	case time.Monday:
 		return calendar.Monday == model.ServiceIsAvailable
@@ -245,8 +240,7 @@ func (calculation *OtpCalculation) onNewPositionData(positionData []InternalVehi
 	defer calculation.Lock.Unlock()
 
 	for _, position := range positionData {
-		year, month, day := position.PositionTime.Date()
-		date := time.Date(year, month, day, 0, 0, 0, 0, calculation.Location)
+		date := calculation.inferTripDate(&position)
 		tripsByTripId, ok := calculation.TripsByDate[date]
 		if !ok {
 			calculation.populateTripsForDate(date, logger)
@@ -264,6 +258,14 @@ func (calculation *OtpCalculation) onNewPositionData(positionData []InternalVehi
 			calculation.markArrivalTimeForAllStopsPrior(trip, position.StopId, position.PositionTime)
 		}
 	}
+}
+
+// TODO: Utilize the static feed and the time of this VehiclePosition update to decide what date
+// this trip is on. This current implementation works for trips before midnight, but doesn't work
+// for anything after midnight UTC
+func (calculation *OtpCalculation) inferTripDate(position *InternalVehiclePosition) infra.Date {
+	y, m, d := position.PositionTime.Date()
+	return infra.Date{y, m, d}
 }
 
 func (calculation *OtpCalculation) OnNewPositionData(positionData []model.VehiclePosition, logger log.Interface) {

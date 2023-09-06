@@ -183,10 +183,6 @@ func (custom *ArrivalDepartureTime) ConvertFromCsv(input string) error {
 	return nil
 }
 
-func (secondsAfterMidnight *ArrivalDepartureTime) ToTimeOnDate(date time.Time) time.Time {
-	return date.Add(time.Duration(*secondsAfterMidnight) * time.Second)
-}
-
 func NewArrivalTime(date time.Time) ArrivalDepartureTime {
 	year, month, day := date.Date()
 	var baseTime time.Time
