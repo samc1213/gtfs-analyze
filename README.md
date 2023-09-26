@@ -19,7 +19,7 @@ This will download the static GTFS dataset at the provided `static-url` and pars
 Then, in another process, we can analyze the on-time performance in the system for a given timerange:
 
 ```bash
-$ gtfs-analyze --log-level info calculate otp --db-path /~/Downloads/rtd.db --start-time 2023-08-22T15:00:00-07:00 --end-time 2023-08-22T16:00:00-07:00
+$ gtfs-analyze --log-level info calculate otp --db-path ~/Downloads/rtd.db --start-time 2023-08-22T15:00:00-07:00 --end-time 2023-08-22T16:00:00-07:00
 ```
 
 This will print a table with the on-time performance per trip. You can configure what is considered to be on-time with the `--threshold` flag.
