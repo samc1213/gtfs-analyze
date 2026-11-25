@@ -13,6 +13,9 @@
 # feeds[].license_url           The agency's terms of use for the feed. Required: read them
 #                               before adding a feed.
 # feeds[].mobility_database_id  Optional cross-reference to https://mobilitydatabase.org.
+# feeds[].static_feeds          Realtime feeds only: ids of this agency's static feeds whose
+#                               trip, route and stop ids the realtime feed refers to. May be
+#                               omitted when the agency has exactly one static feed.
 
 agencies:
   - id: rtd

@@ -47,6 +47,10 @@ type Feed struct {
 	LicenseUrl string `yaml:"license_url"`
 	// The feed's ID in the Mobility Database catalog (https://mobilitydatabase.org), e.g. "mdb-178"
 	MobilityDatabaseId string `yaml:"mobility_database_id,omitempty"`
+	// Realtime feeds only: ids of the agency's static feeds whose trip, route and stop ids
+	// this feed refers to. May be omitted when the agency has exactly one static feed,
+	// in which case Parse fills it in.
+	StaticFeeds []string `yaml:"static_feeds,omitempty"`
 }
 
 // Lowercase letters, digits, hyphens and underscores, starting with a letter: safe in
@@ -131,8 +135,50 @@ func (config *Config) validate() error {
 				errs = append(errs, fmt.Errorf("%s: mobility_database_id must look like mdb-123", feedWhere))
 			}
 		}
+		errs = append(errs, config.Agencies[i].linkStaticFeeds(where)...)
 	}
 	return joinErrors(errs)
+}
+
+// linkStaticFeeds checks that each realtime feed names static feeds of the same agency,
+// defaulting to the agency's only static feed when it names none.
+func (agency *Agency) linkStaticFeeds(where string) []error {
+	var errs []error
+	var staticIds []string
+	isStatic := make(map[string]bool)
+	for _, feed := range agency.Feeds {
+		if feed.Kind == Static {
+			staticIds = append(staticIds, feed.Id)
+			isStatic[feed.Id] = true
+		}
+	}
+	for i := range agency.Feeds {
+		feed := &agency.Feeds[i]
+		feedWhere := fmt.Sprintf("%s feed %q", where, feed.Id)
+		if feed.Kind != Realtime {
+			if len(feed.StaticFeeds) > 0 {
+				errs = append(errs, fmt.Errorf("%s: static_feeds is only for realtime feeds", feedWhere))
+			}
+			continue
+		}
+		if len(feed.StaticFeeds) == 0 {
+			switch len(staticIds) {
+			case 0:
+				errs = append(errs, fmt.Errorf("%s: the agency has no static feed for this realtime feed to refer to", feedWhere))
+			case 1:
+				feed.StaticFeeds = []string{staticIds[0]}
+			default:
+				errs = append(errs, fmt.Errorf("%s: static_feeds is required because the agency has several static feeds (%s)", feedWhere, strings.Join(staticIds, ", ")))
+			}
+			continue
+		}
+		for _, id := range feed.StaticFeeds {
+			if !isStatic[id] {
+				errs = append(errs, fmt.Errorf("%s: static_feeds: %q is not a static feed of this agency", feedWhere, id))
+			}
+		}
+	}
+	return errs
 }
 
 // joinErrors reports every problem at once, one per line (errors.Join needs Go 1.20)

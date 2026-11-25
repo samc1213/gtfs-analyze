@@ -50,6 +50,77 @@ func TestParse(t *testing.T) {
 	assert.Equal(t, Static, rtd.Feeds[0].Kind)
 	assert.Equal(t, "mdb-178", rtd.Feeds[0].MobilityDatabaseId)
 	assert.Equal(t, Realtime, rtd.Feeds[1].Kind)
+	// The agency's only static feed is implied
+	assert.Equal(t, []string{"gtfs"}, rtd.Feeds[1].StaticFeeds)
+	assert.Empty(t, rtd.Feeds[0].StaticFeeds)
+}
+
+func TestStaticFeedsLinkRealtimeFeedsToStaticFeeds(t *testing.T) {
+	config, err := Parse([]byte(`
+agencies:
+  - id: mta-bus
+    name: MTA buses
+    feeds:
+      - id: bronx
+        kind: static
+        url: https://example.com/bronx.zip
+        license_url: https://example.com/license
+      - id: brooklyn
+        kind: static
+        url: https://example.com/brooklyn.zip
+        license_url: https://example.com/license
+      - id: trip_updates
+        kind: realtime
+        url: https://example.com/tu.pb
+        license_url: https://example.com/license
+        static_feeds: [bronx, brooklyn]
+`))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"bronx", "brooklyn"}, config.Agencies[0].Feeds[2].StaticFeeds)
+}
+
+func TestStaticFeedsValidation(t *testing.T) {
+	_, err := Parse([]byte(`
+agencies:
+  - id: two-static
+    name: Two static feeds
+    feeds:
+      - id: a
+        kind: static
+        url: https://example.com/a.zip
+        license_url: https://example.com/license
+        static_feeds: [b]
+      - id: b
+        kind: static
+        url: https://example.com/b.zip
+        license_url: https://example.com/license
+      - id: unlinked
+        kind: realtime
+        url: https://example.com/rt.pb
+        license_url: https://example.com/license
+      - id: wrong_link
+        kind: realtime
+        url: https://example.com/rt.pb
+        license_url: https://example.com/license
+        static_feeds: [unlinked, missing]
+  - id: realtime-only
+    name: No static feed
+    feeds:
+      - id: rt
+        kind: realtime
+        url: https://example.com/rt.pb
+        license_url: https://example.com/license
+`))
+	require.Error(t, err)
+	for _, problem := range []string{
+		`feed "a": static_feeds is only for realtime feeds`,
+		`feed "unlinked": static_feeds is required because the agency has several static feeds (a, b)`,
+		`feed "wrong_link": static_feeds: "unlinked" is not a static feed of this agency`,
+		`feed "wrong_link": static_feeds: "missing" is not a static feed of this agency`,
+		`agency "realtime-only" feed "rt": the agency has no static feed`,
+	} {
+		assert.Contains(t, err.Error(), problem)
+	}
 }
 
 func TestParseRejectsUnknownFields(t *testing.T) {
