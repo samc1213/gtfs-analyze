@@ -19,8 +19,8 @@ import (
 // Upper bound on a GTFS-RT response body, to protect against a misbehaving server
 const maxRtFeedBytes = 64 << 20
 
-// FetchRtFeed downloads and decodes a GTFS-RT FeedMessage from url.
-func FetchRtFeed(ctx context.Context, client *http.Client, url string) (*gtfs_realtime.FeedMessage, error) {
+// FetchRtFeedBytes downloads the raw protobuf bytes of a GTFS-RT feed from url.
+func FetchRtFeedBytes(ctx context.Context, client *http.Client, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func FetchRtFeed(ctx context.Context, client *http.Client, url string) (*gtfs_re
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: reading body: %w", url, err)
 	}
-	return ParseRtFeed(protoBytes)
+	return protoBytes, nil
 }
 
 // ParseRtFeed decodes GTFS-RT protobuf bytes into a FeedMessage.

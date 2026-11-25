@@ -13,7 +13,7 @@ Agencies and their feeds are listed in [`agencies.yaml`](agencies.yaml). Each ag
 To start storing data for Denver's RTD system:
 
 ```bash
-$ gtfs-analyze --log-level info store --agency rtd --db-path ~/Downloads/rtd.db
+$ gtfs-analyze --log-level info store --agency rtd --db-path ~/Downloads/rtd.db --archive-dir ~/Downloads/gtfs-archive
 ```
 
 `--config` points at a different config file (default `agencies.yaml`). A SQLite database holds one agency.
@@ -22,6 +22,7 @@ This runs until interrupted (Ctrl+C or SIGTERM), polling the static feed every `
 
 What gets stored:
 * **Static GTFS**: each new feed version is stored in full, keyed by `feed_info.txt`'s `feed_version` (or a hash of the feed files if there is none). Versions already in the database are skipped.
+* **Raw archive** (`--archive-dir`): every distinct download, exactly as received, laid out by agency and feed id from `agencies.yaml`. Realtime snapshots are gzipped under `<agency>/<feed>/YYYY/MM/DD/<UTC time>.pb.gz` (`.invalid.gz` if the body wasn't a valid GTFS-RT message), static zips under `<agency>/<feed>/<version>_<hash>.zip`. The archive is written before the database, so the database can always be rebuilt from it. `--archive-dir` works without `--db-path` for an archive-only fetcher, and then can collect any number of agencies at once (omit `--agency` to collect every agency in the config).
 * **GTFS-RT**: stored as a history of changes rather than a copy of every snapshot. A row is written to `vehicle_positions`, `trip_updates`, `stop_time_updates` or `alerts` only when that vehicle, trip, stop prediction or alert changed since the previous snapshot. `message_timestamp` on each row is the feed snapshot in which the change was seen. Change detection is kept in memory, so the first snapshot after a restart is stored in full.
 
 Then, in another process, we can analyze the on-time performance in the system for a given timerange:

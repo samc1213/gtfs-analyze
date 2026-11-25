@@ -163,7 +163,7 @@ func TestStoreJobsAreNamedByAgencyAndFeed(t *testing.T) {
 		{Id: "gtfs", Kind: config.Static, Url: "https://example.com/gtfs.zip"},
 		{Id: "vehicle_positions", Kind: config.Realtime, Url: "https://example.com/vp.pb"},
 	}}}
-	jobs, err := buildStoreJobs(StoreConfig{Agencies: agencies, StaticPollInterval: time.Hour, RtPollInterval: time.Second}, log.New(log.Silent), &storeTarget{})
+	jobs, err := buildStoreJobs(StoreConfig{Agencies: agencies, StaticPollInterval: time.Hour, RtPollInterval: time.Second}, log.New(log.Silent), &storeTargets{})
 	require.NoError(t, err)
 	require.Len(t, jobs, 2)
 	assert.Equal(t, "rtd/gtfs", jobs[0].name)

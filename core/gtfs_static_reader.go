@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -22,7 +23,19 @@ import (
 	"gorm.io/gorm"
 )
 
-func ParseStaticGtfsFromUrl(ctx context.Context, client *http.Client, url string) (*model.GtfsStaticFeed, error) {
+// DownloadedStaticGtfs is a static GTFS zip saved to a temporary file. Call Remove when done.
+type DownloadedStaticGtfs struct {
+	Path string
+	// Hex SHA-256 of the zip file
+	Sha256 string
+}
+
+func (download *DownloadedStaticGtfs) Remove() {
+	os.Remove(download.Path)
+}
+
+// DownloadStaticGtfs saves the static GTFS zip at url to a temporary file.
+func DownloadStaticGtfs(ctx context.Context, client *http.Client, url string) (*DownloadedStaticGtfs, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -41,26 +54,20 @@ func ParseStaticGtfsFromUrl(ctx context.Context, client *http.Client, url string
 	if err != nil {
 		return nil, err
 	}
-	defer tempFile.Close()
-	defer os.Remove(tempFile.Name())
+	download := &DownloadedStaticGtfs{Path: tempFile.Name()}
 
-	_, err = io.Copy(tempFile, resp.Body)
-	if err != nil {
-		return nil, err
+	hash := sha256.New()
+	_, err = io.Copy(io.MultiWriter(tempFile, hash), resp.Body)
+	closeErr := tempFile.Close()
+	if err == nil {
+		err = closeErr
 	}
-
-	gtfsFiles, err := getGtfsFilesFromZip(tempFile.Name())
 	if err != nil {
-		return nil, err
+		download.Remove()
+		return nil, fmt.Errorf("GET %s: %w", url, err)
 	}
-
-	result, err := parseStaticGtfsFromFiles(gtfsFiles)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	download.Sha256 = hex.EncodeToString(hash.Sum(nil))
+	return download, nil
 }
 
 // Parses a static GTFS feed into a struct. Handles a local folder, or local zipped file
