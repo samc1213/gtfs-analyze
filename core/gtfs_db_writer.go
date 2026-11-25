@@ -81,6 +81,9 @@ func WriteStaticGtfsFeedToDatabase(ctx context.Context, feed *model.GtfsStaticFe
 		if err := insertAll(tx, feed.Calendar); err != nil {
 			return err
 		}
+		if err := insertAll(tx, feed.Shape); err != nil {
+			return err
+		}
 		// FeedInfo is written last: its presence marks the feed as fully stored
 		return tx.Create(&feed.FeedInfo).Error
 	})
