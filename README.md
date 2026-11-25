@@ -25,8 +25,6 @@ What gets stored:
 * **Static GTFS**: each new feed version is stored in full, keyed by `feed_info.txt`'s `feed_version` (or a hash of the feed files if there is none). Versions already in the database are skipped.
 * **GTFS-RT**: stored as a history of changes rather than a copy of every snapshot. A row is written to `vehicle_positions`, `trip_updates`, `stop_time_updates` or `alerts` only when that vehicle, trip, stop prediction or alert changed since the previous snapshot. `message_timestamp` on each row is the feed snapshot in which the change was seen. Change detection is kept in memory, so the first snapshot after a restart is stored in full.
 
-The database uses SQLite's WAL mode, so you can query it (or run `calculate otp`) while `store` is running.
-
 Then, in another process, we can analyze the on-time performance in the system for a given timerange:
 
 ```bash

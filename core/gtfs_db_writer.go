@@ -5,36 +5,22 @@ import (
 	stdlog "log"
 	"os"
 
+	"github.com/glebarez/sqlite"
 	"github.com/samc1213/gtfs-analyze/log"
 	"github.com/samc1213/gtfs-analyze/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-// Rows per INSERT statement. Bigger isn't better here: the SQLite driver binds
-// parameters in time quadratic in the parameter count, and on RTD's static feed
-// 200 rows was faster than both 50 and 500.
-const insertBatchSize = 200
-
 func InitializeSqliteDatabase(databasePath string, logLevel log.Level) (*gorm.DB, error) {
-	loggerConfig := logger.Config{LogLevel: getGormLogLevel(logLevel), IgnoreRecordNotFoundError: true}
+	loggerConfig := logger.Config{LogLevel: getGormLogLevel(logLevel)}
 	innerLogger := logger.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags), loggerConfig)
-	// WAL lets other processes (e.g. `calculate otp`) read while the store daemon writes.
-	// busy_timeout makes a connection wait for a lock held by another process rather than fail.
-	// Set via the DSN so they apply to every connection the pool opens.
-	dsn := databasePath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)&_pragma=synchronous(NORMAL)"
-	db, err := gorm.Open(newSqliteDialector(dsn), &gorm.Config{Logger: innerLogger, CreateBatchSize: insertBatchSize})
+	// The static and realtime feeds are written from separate goroutines. busy_timeout makes
+	// a writer wait for another's lock instead of failing with "database is locked".
+	db, err := gorm.Open(sqlite.Open(databasePath+"?_pragma=busy_timeout(30000)"), &gorm.Config{Logger: innerLogger})
 	if err != nil {
 		return nil, err
 	}
-
-	// SQLite allows only one writer at a time. Use a single connection so the static
-	// and realtime pollers queue up in-process instead of failing with "database is locked".
-	sqlDb, err := db.DB()
-	if err != nil {
-		return nil, err
-	}
-	sqlDb.SetMaxOpenConns(1)
 
 	// Migrate the schema
 	err = db.AutoMigrate(model.GetAllModels()...)
@@ -64,12 +50,15 @@ func getGormLogLevel(logLevel log.Level) logger.LogLevel {
 	}
 }
 
-// insertAll inserts rows in batches. gorm returns an error for an empty slice, so skip those.
+// insertAll inserts rows one at a time. SQLite is a stopgap store, so this favours
+// simplicity over speed (multi-row inserts would need a gorm dialector workaround).
 func insertAll[T any](tx *gorm.DB, rows []T) error {
-	if len(rows) == 0 {
-		return nil
+	for i := range rows {
+		if err := tx.Create(&rows[i]).Error; err != nil {
+			return err
+		}
 	}
-	return tx.CreateInBatches(rows, insertBatchSize).Error
+	return nil
 }
 
 func WriteStaticGtfsFeedToDatabase(ctx context.Context, feed *model.GtfsStaticFeed, db *gorm.DB) error {

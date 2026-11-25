@@ -76,7 +76,7 @@ func TestWriteTripUpdatesAndAlerts(t *testing.T) {
 	require.Len(t, alert.ActivePeriods, 1)
 }
 
-func TestWriteStaticFeedInBatches(t *testing.T) {
+func TestWriteStaticFeed(t *testing.T) {
 	if testing.Short() {
 		t.Skip("writes a full RTD feed; takes ~1 minute")
 	}
