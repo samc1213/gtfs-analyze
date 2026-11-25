@@ -45,7 +45,7 @@ $ go test ./...
 
 No C compiler is needed: SQLite access uses a pure-Go driver.
 
-The GTFS-RT bindings in `gtfs_realtime/` are generated from `gtfs-realtime.proto` and committed. To regenerate them after updating the proto, install [`protoc`](https://github.com/protocolbuffers/protobuf/releases) and run `go generate ./gtfs_realtime`.
+The GTFS-RT bindings in `gtfs_realtime/` are generated from `gtfs-realtime.proto` and committed. To regenerate them after updating the proto, install [`protoc`](https://github.com/protocolbuffers/protobuf/releases) and run `go generate ./...`.
 
 ## Packages
 * **[core](core/)**: All the core logic and database interaction of the tool
