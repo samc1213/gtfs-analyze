@@ -1,6 +1,14 @@
 name: Go package
 
-on: [push]
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# A new push to a PR cancels its in-progress run; runs on master always finish
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
