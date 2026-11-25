@@ -207,7 +207,7 @@ type StopTime struct {
 	StopSequence     int32                   `csv_parse:"stop_sequence" gorm:"primaryKey;not null;default:null"`
 	StopHeadsign     string                  `csv_parse:"stop_headsign" gorm:"default:null"`
 	PickupType       PickupDropoffType       `csv_parse:"pickup_type;default:0"`
-	DropoffType      PickupDropoffType       `csv_parse:"dropoff_type;default:0"`
+	DropoffType      PickupDropoffType       `csv_parse:"drop_off_type;default:0"`
 	ContinuousPickup ContinuousPickupDropoff `csv_parse:"continuous_pickup"`
 }
 

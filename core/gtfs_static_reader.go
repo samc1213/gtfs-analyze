@@ -105,6 +105,8 @@ func getGtfsFilesFromZip(path string) (*GtfsFileCollection, error) {
 	if err != nil {
 		return nil, errors.New("Unable to read zip file at " + path + ". Must provide an unzipped directory with GTFS txt files, or a zipped google_transit.zip file")
 	}
+	// Every file is read fully into memory below, so the zip can be closed on return
+	defer archive.Close()
 
 	for _, f := range archive.File {
 		readerCloser, err := f.Open()
