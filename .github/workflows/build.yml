@@ -22,15 +22,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v1
-        with:
-          # Unauthenticated release lookups hit GitHub's per-IP rate limit on shared runners
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Generate
-        run: ./gtfs_realtime/generate.sh
-
       - name: Go mod tidy check
         run: |
           go mod tidy
