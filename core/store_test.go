@@ -3,12 +3,15 @@ package core
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/samc1213/gtfs-analyze/config"
 	"github.com/samc1213/gtfs-analyze/log"
 	"github.com/samc1213/gtfs-analyze/model"
 	"github.com/stretchr/testify/assert"
@@ -130,7 +133,41 @@ func TestPollKeepsGoingAfterErrorsAndStopsOnCancel(t *testing.T) {
 	assert.GreaterOrEqual(t, runs.Load(), int32(5))
 }
 
-func TestStoreRequiresAFeed(t *testing.T) {
+func TestStoreRequiresAnAgency(t *testing.T) {
 	err := Store(context.Background(), StoreConfig{DbPath: filepath.Join(t.TempDir(), "x.db"), LogLevel: log.Silent})
-	assert.ErrorContains(t, err, "nothing to store")
+	assert.ErrorContains(t, err, "no agencies selected")
+}
+
+func TestStoreWritesOneAgencyPerDatabase(t *testing.T) {
+	agencies := []config.Agency{{Id: "a"}, {Id: "b"}}
+	err := Store(context.Background(), StoreConfig{DbPath: filepath.Join(t.TempDir(), "x.db"), Agencies: agencies, LogLevel: log.Silent})
+	assert.ErrorContains(t, err, "choose one with --agency")
+}
+
+func TestFeedClientSendsConfiguredHeaders(t *testing.T) {
+	var received http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = r.Header
+	}))
+	defer server.Close()
+
+	client := newFeedClient(time.Second, http.Header{"X-Api-Key": {"secret"}})
+	response, err := client.Get(server.URL)
+	require.NoError(t, err)
+	response.Body.Close()
+	assert.Equal(t, "secret", received.Get("X-Api-Key"))
+}
+
+func TestStoreJobsAreNamedByAgencyAndFeed(t *testing.T) {
+	agencies := []config.Agency{{Id: "rtd", Feeds: []config.Feed{
+		{Id: "gtfs", Kind: config.Static, Url: "https://example.com/gtfs.zip"},
+		{Id: "vehicle_positions", Kind: config.Realtime, Url: "https://example.com/vp.pb"},
+	}}}
+	jobs, err := buildStoreJobs(StoreConfig{Agencies: agencies, StaticPollInterval: time.Hour, RtPollInterval: time.Second}, log.New(log.Silent), &storeTarget{})
+	require.NoError(t, err)
+	require.Len(t, jobs, 2)
+	assert.Equal(t, "rtd/gtfs", jobs[0].name)
+	assert.Equal(t, time.Hour, jobs[0].interval)
+	assert.Equal(t, "rtd/vehicle_positions", jobs[1].name)
+	assert.Equal(t, time.Second, jobs[1].interval)
 }

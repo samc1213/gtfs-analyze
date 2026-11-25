@@ -10,6 +10,7 @@ require (
 
 require (
 	github.com/glebarez/sqlite v1.11.0
+	go.yaml.in/yaml/v3 v3.0.6
 	google.golang.org/protobuf v1.26.0
 )
 

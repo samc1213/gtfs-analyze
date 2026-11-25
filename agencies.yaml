@@ -1,0 +1,40 @@
+# Agencies and feeds collected by `gtfs-analyze store`.
+#
+# agencies[].id     Our identifier for the publisher, e.g. "rtd". Lowercase letters, digits,
+#                   '-' and '_'. It names the agency in archive paths and on the command line,
+#                   so never change it once data has been collected. GTFS has no globally unique
+#                   agency id (agency_id is only unique within one feed), so we assign our own and
+#                   cross-reference public catalogs per feed.
+# agencies[].name   Human-readable name.
+# feeds[].id        Unique within the agency, same rules as agency ids.
+# feeds[].kind      "static" (a GTFS zip) or "realtime" (GTFS-RT protobuf).
+# feeds[].url       Download URL. May reference environment variables as ${NAME}, for API keys.
+# feeds[].headers   Optional HTTP headers, e.g. `x-api-key: ${WMATA_API_KEY}`.
+# feeds[].license_url           The agency's terms of use for the feed. Required: read them
+#                               before adding a feed.
+# feeds[].mobility_database_id  Optional cross-reference to https://mobilitydatabase.org.
+
+agencies:
+  - id: rtd
+    name: Regional Transportation District (Denver)
+    feeds:
+      - id: gtfs
+        kind: static
+        url: https://www.rtd-denver.com/files/gtfs/google_transit.zip
+        license_url: https://www.rtd-denver.com/business-center/open-spatial-data/gtfs-license-agreement
+        mobility_database_id: mdb-178
+      - id: vehicle_positions
+        kind: realtime
+        url: https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb
+        license_url: https://www.rtd-denver.com/business-center/open-spatial-data/gtfs-realtime-license-agreement
+        mobility_database_id: mdb-1678
+      - id: trip_updates
+        kind: realtime
+        url: https://www.rtd-denver.com/files/gtfs-rt/TripUpdate.pb
+        license_url: https://www.rtd-denver.com/business-center/open-spatial-data/gtfs-realtime-license-agreement
+        mobility_database_id: mdb-1676
+      - id: alerts
+        kind: realtime
+        url: https://www.rtd-denver.com/files/gtfs-rt/Alerts.pb
+        license_url: https://www.rtd-denver.com/business-center/open-spatial-data/gtfs-realtime-license-agreement
+        mobility_database_id: mdb-1677
