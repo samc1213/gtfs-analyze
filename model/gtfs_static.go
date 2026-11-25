@@ -269,5 +269,10 @@ func GetAllModels() []interface{} {
 		&Calendar{},
 		&FeedInfo{},
 		&VehiclePosition{},
+		&TripUpdate{},
+		&StopTimeUpdate{},
+		&Alert{},
+		&AlertActivePeriod{},
+		&AlertInformedEntity{},
 	}
 }

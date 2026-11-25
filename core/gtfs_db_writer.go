@@ -1,22 +1,42 @@
 package core
 
 import (
-	"errors"
+	"context"
 	stdlog "log"
 	"os"
 
 	"github.com/samc1213/gtfs-analyze/log"
 	"github.com/samc1213/gtfs-analyze/model"
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
+// Rows per INSERT statement. Bigger isn't better here: the SQLite driver binds
+// parameters in time quadratic in the parameter count, and on RTD's static feed
+// 200 rows was faster than both 50 and 500.
+const insertBatchSize = 200
+
 func InitializeSqliteDatabase(databasePath string, logLevel log.Level) (*gorm.DB, error) {
-	loggerConfig := logger.Config{LogLevel: getGormLogLevel(logLevel)}
+	loggerConfig := logger.Config{LogLevel: getGormLogLevel(logLevel), IgnoreRecordNotFoundError: true}
 	innerLogger := logger.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags), loggerConfig)
-	db, err := gorm.Open(sqlite.Open(databasePath), &gorm.Config{Logger: innerLogger})
+	// WAL lets other processes (e.g. `calculate otp`) read while the store daemon writes.
+	// busy_timeout makes a connection wait for a lock held by another process rather than fail.
+	// Set via the DSN so they apply to every connection the pool opens.
+	dsn := databasePath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)&_pragma=synchronous(NORMAL)"
+	db, err := gorm.Open(newSqliteDialector(dsn), &gorm.Config{Logger: innerLogger, CreateBatchSize: insertBatchSize})
 	if err != nil {
+		return nil, err
+	}
+
+	// SQLite allows only one writer at a time. Use a single connection so the static
+	// and realtime pollers queue up in-process instead of failing with "database is locked".
+	sqlDb, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDb.SetMaxOpenConns(1)
+
+	if err := migrateLegacyVehiclePositions(db); err != nil {
 		return nil, err
 	}
 
@@ -27,6 +47,31 @@ func InitializeSqliteDatabase(databasePath string, logLevel log.Level) (*gorm.DB
 	}
 
 	return db, nil
+}
+
+// Databases created before vehicle_positions had an auto-increment key used the feed
+// entity id as the primary key, which kept only the latest position per vehicle.
+// That table can't be migrated in place, so set it aside and let AutoMigrate create the new one.
+func migrateLegacyVehiclePositions(db *gorm.DB) error {
+	migrator := db.Migrator()
+	if !migrator.HasTable(&model.VehiclePosition{}) || migrator.HasColumn(&model.VehiclePosition{}, "EntityId") {
+		return nil
+	}
+	if migrator.HasTable("vehicle_positions_legacy") {
+		if err := migrator.DropTable("vehicle_positions_legacy"); err != nil {
+			return err
+		}
+	}
+	if err := migrator.RenameTable("vehicle_positions", "vehicle_positions_legacy"); err != nil {
+		return err
+	}
+	// Indexes keep their names after a rename and would collide with the new table's indexes
+	for _, index := range []string{"idx_vehicle_positions_message_timestamp", "idx_vehicle_positions_position_timestamp"} {
+		if err := db.Exec("DROP INDEX IF EXISTS " + index).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func getGormLogLevel(logLevel log.Level) logger.LogLevel {
@@ -48,85 +93,52 @@ func getGormLogLevel(logLevel log.Level) logger.LogLevel {
 	}
 }
 
-func WriteStaticGtfsFeedToDatabase(feed *model.GtfsStaticFeed, db *gorm.DB) error {
-	return db.Transaction(func(tx *gorm.DB) error {
-		for _, agency := range feed.Agency {
-			result := tx.Create(&agency)
-			if result.Error != nil {
-				return result.Error
-			}
-		}
-		for _, stop := range feed.Stop {
-			result := tx.Create(&stop)
-			if result.Error != nil {
-				return result.Error
-			}
-		}
-		for _, route := range feed.Route {
-			result := tx.Create(&route)
-			if result.Error != nil {
-				return result.Error
-			}
-		}
-		for _, trip := range feed.Trip {
-			result := tx.Create(&trip)
-			if result.Error != nil {
-				return result.Error
-			}
-		}
-		for _, stopTime := range feed.StopTime {
-			result := tx.Create(&stopTime)
-			if result.Error != nil {
-				return result.Error
-			}
-		}
-		for _, calendar := range feed.Calendar {
-			result := tx.Create(&calendar)
-			if result.Error != nil {
-				return result.Error
-			}
-		}
-		result := tx.Create(&feed.FeedInfo)
-		if result.Error != nil {
-			return result.Error
-		}
-
+// insertAll inserts rows in batches. gorm returns an error for an empty slice, so skip those.
+func insertAll[T any](tx *gorm.DB, rows []T) error {
+	if len(rows) == 0 {
 		return nil
+	}
+	return tx.CreateInBatches(rows, insertBatchSize).Error
+}
+
+func WriteStaticGtfsFeedToDatabase(ctx context.Context, feed *model.GtfsStaticFeed, db *gorm.DB) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := insertAll(tx, feed.Agency); err != nil {
+			return err
+		}
+		if err := insertAll(tx, feed.Stop); err != nil {
+			return err
+		}
+		if err := insertAll(tx, feed.Route); err != nil {
+			return err
+		}
+		if err := insertAll(tx, feed.Trip); err != nil {
+			return err
+		}
+		if err := insertAll(tx, feed.StopTime); err != nil {
+			return err
+		}
+		if err := insertAll(tx, feed.Calendar); err != nil {
+			return err
+		}
+		// FeedInfo is written last: its presence marks the feed as fully stored
+		return tx.Create(&feed.FeedInfo).Error
 	})
 }
 
-func WriteRealTimePositionUpdateToDatabase(positionUpdates []model.VehiclePosition, db *gorm.DB) error {
-	return db.Transaction(func(tx *gorm.DB) error {
-		for _, positionUpdate := range positionUpdates {
-			// Save won't fail if there is a Primary Key conflict
-			result := tx.Save(&positionUpdate)
-			if result.Error != nil {
-				return result.Error
-			}
+// WriteRtChangesToDatabase stores the rows from one GTFS-RT snapshot in a single transaction.
+func WriteRtChangesToDatabase(ctx context.Context, changes *RtChanges, db *gorm.DB) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := insertAll(tx, changes.VehiclePositions); err != nil {
+			return err
 		}
-
-		return nil
+		if err := insertAll(tx, changes.TripUpdates); err != nil {
+			return err
+		}
+		if err := insertAll(tx, changes.StopTimeUpdates); err != nil {
+			return err
+		}
+		// gorm also inserts each alert's ActivePeriods and InformedEntities
+		return insertAll(tx, changes.Alerts)
 	})
-}
-
-type LatestRtUpdateTracker struct {
-	latestVehiclePositionTimestamp uint64
-}
-
-func (tracker *LatestRtUpdateTracker) ShouldProcessMessage(vehiclePositionTimestamp uint64) bool {
-	if vehiclePositionTimestamp > tracker.latestVehiclePositionTimestamp {
-		tracker.latestVehiclePositionTimestamp = vehiclePositionTimestamp
-		return true
-	}
-
-	return false
-}
-
-func NewUpdateTracker(db *gorm.DB) (*LatestRtUpdateTracker, error) {
-	var vehiclePosition model.VehiclePosition
-	tx := db.Order("message_timestamp DESC").First(&vehiclePosition)
-	if tx.Error != nil && !errors.Is(tx.Error, gorm.ErrRecordNotFound) {
-		return nil, tx.Error
-	}
-	return &LatestRtUpdateTracker{latestVehiclePositionTimestamp: vehiclePosition.MessageTimestamp}, nil
 }

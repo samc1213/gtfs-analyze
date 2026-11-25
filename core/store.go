@@ -1,6 +1,11 @@
 package core
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"sync"
 	"time"
 
 	"github.com/samc1213/gtfs-analyze/log"
@@ -8,170 +13,220 @@ import (
 	"gorm.io/gorm"
 )
 
-func Store(sqliteDbPath string, staticGtfsUrl string, vehiclePositionUrl string,
-	staticPollIntervalMins uint, rtPollIntervalSecs uint, logLevel log.Level) (*chan struct{}, error) {
-	logger := log.New(logLevel)
-
-	db, err := initializeSqliteDb(logger, sqliteDbPath, logLevel)
-	if err != nil {
-		return nil, err
-	}
-
-	quitPoll := make(chan struct{})
-	polling := false
-
-	if staticGtfsUrl != "" {
-		if staticPollIntervalMins != 0 {
-			polling = true
-			err = storeStaticGtfs(logger, staticGtfsUrl, db, sqliteDbPath)
-			if err != nil {
-				return &quitPoll, err
-			}
-			staticTicker := time.NewTicker(time.Duration(staticPollIntervalMins) * time.Minute)
-			go func() {
-				for {
-					select {
-					case <-staticTicker.C:
-						err = storeStaticGtfs(logger, staticGtfsUrl, db, sqliteDbPath)
-						if err != nil {
-							staticTicker.Stop()
-							return
-						}
-					case <-quitPoll:
-						staticTicker.Stop()
-						return
-					}
-				}
-			}()
-		} else {
-			err = storeStaticGtfs(logger, staticGtfsUrl, db, sqliteDbPath)
-			if err != nil {
-				return &quitPoll, err
-			}
-		}
-	}
-
-	if vehiclePositionUrl != "" {
-		if rtPollIntervalSecs != 0 {
-			polling = true
-			err = storeRtGtfs(logger, vehiclePositionUrl, db)
-			if err != nil {
-				return &quitPoll, err
-			}
-			rtTicker := time.NewTicker(time.Duration(rtPollIntervalSecs) * time.Second)
-			go func() {
-				for {
-					select {
-					case <-rtTicker.C:
-						err = storeRtGtfs(logger, vehiclePositionUrl, db)
-						if err != nil {
-							rtTicker.Stop()
-							return
-						}
-					case <-quitPoll:
-						rtTicker.Stop()
-						return
-					}
-				}
-			}()
-		} else {
-			err = storeRtGtfs(logger, vehiclePositionUrl, db)
-			if err != nil {
-				return &quitPoll, err
-			}
-		}
-	}
-
-	if polling {
-		for {
-			time.Sleep(50 * time.Millisecond)
-		}
-	}
-
-	return &quitPoll, err
+type StoreConfig struct {
+	DbPath             string
+	StaticUrl          string
+	VehiclePositionUrl string
+	TripUpdatesUrl     string
+	AlertsUrl          string
+	// Zero means fetch once and exit instead of polling
+	StaticPollInterval time.Duration
+	// Zero means fetch once and exit instead of polling
+	RtPollInterval time.Duration
+	LogLevel       log.Level
 }
 
-func storeStaticGtfs(logger log.Interface, staticGtfsUrl string, db *gorm.DB, sqliteDbPath string) error {
-	feed, err := parseStaticGtfsFromUrl(logger, staticGtfsUrl)
-	if err != nil {
-		return err
+// A feed to fetch and store, either once or on an interval
+type storeJob struct {
+	name     string
+	interval time.Duration
+	run      func(ctx context.Context) error
+}
+
+// Store fetches the configured feeds and writes them to the SQLite database.
+//
+// Feeds with a non-zero poll interval are polled until ctx is cancelled. A failed
+// poll is logged and retried on the next interval; it never stops the daemon.
+// Feeds with a zero poll interval are fetched once, and their errors are returned.
+// Store returns once ctx is cancelled and in-flight work has stopped, or, if nothing
+// polls, once every feed has been fetched.
+func Store(ctx context.Context, config StoreConfig) error {
+	logger := log.New(config.LogLevel)
+
+	if config.StaticUrl == "" && config.VehiclePositionUrl == "" && config.TripUpdatesUrl == "" && config.AlertsUrl == "" {
+		return errors.New("nothing to store: provide at least one of --static-url, --vehicle-pos-url, --trip-updates-url or --alerts-url")
 	}
 
-	err = writeStaticGtfsToDbIfNeeded(feed, db, logger, sqliteDbPath)
+	logger.Info("Initializing SQLite database at path: %s", config.DbPath)
+	db, err := InitializeSqliteDatabase(config.DbPath, config.LogLevel)
 	if err != nil {
 		return err
 	}
+	defer closeDb(db, logger)
+
+	jobs := buildStoreJobs(config, logger, db)
+
+	var wg sync.WaitGroup
+	var oneShotErrsLock sync.Mutex
+	var oneShotErrs []error
+	for _, job := range jobs {
+		job := job
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if job.interval == 0 {
+				if err := job.run(ctx); err != nil {
+					oneShotErrsLock.Lock()
+					oneShotErrs = append(oneShotErrs, fmt.Errorf("%s: %w", job.name, err))
+					oneShotErrsLock.Unlock()
+				}
+				return
+			}
+			poll(ctx, job, logger)
+		}()
+	}
+	wg.Wait()
+
+	if len(oneShotErrs) > 0 {
+		for _, err := range oneShotErrs[1:] {
+			logger.Error("%s", err)
+		}
+		return oneShotErrs[0]
+	}
+	logger.Info("Stopped storing feeds")
 	return nil
 }
 
-func storeRtGtfs(logger log.Interface, vehiclePositionUrl string, db *gorm.DB) error {
-	updateTracker, err := NewUpdateTracker(db)
-	if err != nil {
-		return err
+func buildStoreJobs(config StoreConfig, logger log.Interface, db *gorm.DB) []storeJob {
+	var jobs []storeJob
+
+	if config.StaticUrl != "" {
+		// The static feed is tens of MB, so allow it far longer than a realtime fetch
+		client := &http.Client{Timeout: 10 * time.Minute}
+		jobs = append(jobs, storeJob{
+			name:     "static GTFS",
+			interval: config.StaticPollInterval,
+			run: func(ctx context.Context) error {
+				return storeStaticGtfs(ctx, logger, client, config.StaticUrl, db)
+			},
+		})
 	}
-	logger.Info("Fetching GTFS-RT data")
-	vehiclePositions, err := ParseRtGtfsFromUrl(vehiclePositionUrl)
-	if err != nil {
-		return err
+
+	rtClient := &http.Client{Timeout: 30 * time.Second}
+	rtFeeds := []struct{ name, url string }{
+		{"vehicle positions", config.VehiclePositionUrl},
+		{"trip updates", config.TripUpdatesUrl},
+		{"alerts", config.AlertsUrl},
 	}
-	logger.Info("Done fetching GTFS-RT data")
-	if len(vehiclePositions) > 0 && updateTracker.ShouldProcessMessage(vehiclePositions[0].MessageTimestamp) {
-		logger.Info("Writing GTFS-RT data to database")
-		WriteRealTimePositionUpdateToDatabase(vehiclePositions, db)
+	for _, feed := range rtFeeds {
+		if feed.url == "" {
+			continue
+		}
+		name, url := feed.name, feed.url
+		tracker := NewRtFeedTracker()
+		jobs = append(jobs, storeJob{
+			name:     name,
+			interval: config.RtPollInterval,
+			run: func(ctx context.Context) error {
+				return storeRtGtfs(ctx, logger, rtClient, name, url, tracker, db)
+			},
+		})
+	}
+
+	return jobs
+}
+
+// poll runs job immediately and then every job.interval until ctx is cancelled.
+// Runs never overlap: if a run takes longer than the interval, the missed ticks are skipped.
+func poll(ctx context.Context, job storeJob, logger log.Interface) {
+	logger.Info("Polling %s every %s", job.name, job.interval)
+	ticker := time.NewTicker(job.interval)
+	defer ticker.Stop()
+
+	consecutiveFailures := 0
+	for {
+		err := job.run(ctx)
+		if ctx.Err() != nil {
+			// Shutting down; an error here is just the cancelled request or transaction
+			return
+		}
 		if err != nil {
-			return err
+			consecutiveFailures++
+			logger.Error("Storing %s failed (%d in a row), will retry in %s: %s", job.name, consecutiveFailures, job.interval, err)
+		} else if consecutiveFailures > 0 {
+			logger.Warning("Storing %s recovered after %d failed attempts", job.name, consecutiveFailures)
+			consecutiveFailures = 0
 		}
-		logger.Info("Done writing GTFS-RT data to database")
-	} else {
-		logger.Info("Duplicate RT message detected, will not process")
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
-	return nil
 }
 
-// TODO: wrap the gorm database objects in some interface for better testing
-// and ability to change library?
-func writeStaticGtfsToDbIfNeeded(feed *model.GtfsStaticFeed, db *gorm.DB, logger log.Interface, sqliteDbPath string) error {
-	feedExists, err := doesFeedAlreadyExist(feed, db)
+func closeDb(db *gorm.DB, logger log.Interface) {
+	sqlDb, err := db.DB()
+	if err == nil {
+		err = sqlDb.Close()
+	}
+	if err != nil {
+		logger.Error("Closing database: %s", err)
+	}
+}
+
+func storeStaticGtfs(ctx context.Context, logger log.Interface, client *http.Client, staticGtfsUrl string, db *gorm.DB) error {
+	logger.Info("Downloading and parsing static GTFS from %s", staticGtfsUrl)
+	feed, err := ParseStaticGtfsFromUrl(ctx, client, staticGtfsUrl)
 	if err != nil {
 		return err
 	}
 
+	feedExists, err := doesFeedAlreadyExist(ctx, feed, db)
+	if err != nil {
+		return err
+	}
 	if feedExists {
-		logger.Warning("Feed already exists in database at %s", sqliteDbPath)
-	} else {
-		logger.Info("Writing GTFS static feed to database")
-		err = WriteStaticGtfsFeedToDatabase(feed, db)
-		logger.Info("Done writing GTFS static feed to database")
-
-		if err != nil {
-			return err
-		}
+		logger.Info("Static GTFS version %s is already stored", feed.FeedInfo.Version)
+		return nil
 	}
+
+	logger.Info("Writing static GTFS version %s to database", feed.FeedInfo.Version)
+	start := time.Now()
+	if err := WriteStaticGtfsFeedToDatabase(ctx, feed, db); err != nil {
+		return err
+	}
+	logger.Info("Stored static GTFS version %s (%d trips, %d stop times) in %s",
+		feed.FeedInfo.Version, len(feed.Trip), len(feed.StopTime), time.Since(start).Round(time.Millisecond))
 	return nil
 }
 
-func parseStaticGtfsFromUrl(logger log.Interface, staticGtfsUrl string) (*model.GtfsStaticFeed, error) {
-	logger.Info("Parsing static GTFS from url: %s", staticGtfsUrl)
-	feed, err := ParseStaticGtfsFromUrl(staticGtfsUrl)
+func storeRtGtfs(ctx context.Context, logger log.Interface, client *http.Client, name string, url string, tracker *RtFeedTracker, db *gorm.DB) error {
+	message, err := FetchRtFeed(ctx, client, url)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	logger.Info("Done parsing static GTFS from url: %s", staticGtfsUrl)
-	return feed, nil
+
+	changes := tracker.Diff(message)
+	if changes == nil {
+		logger.Debug("%s: snapshot %d already stored", name, message.GetHeader().GetTimestamp())
+		return nil
+	}
+
+	const maxEntityErrorsToLog = 5
+	for i, entityErr := range changes.EntityErrors {
+		if i == maxEntityErrorsToLog {
+			logger.Warning("%s: skipped %d more invalid entities", name, len(changes.EntityErrors)-maxEntityErrorsToLog)
+			break
+		}
+		logger.Warning("%s: skipped invalid entity: %s", name, entityErr)
+	}
+
+	if changes.RowCount() > 0 {
+		if err := WriteRtChangesToDatabase(ctx, changes, db); err != nil {
+			return err
+		}
+	}
+	tracker.Commit(changes)
+
+	logger.Info("%s: snapshot %d of %d entities stored %d vehicle positions, %d trip updates, %d stop time updates, %d alerts",
+		name, changes.MessageTimestamp, len(message.Entity), len(changes.VehiclePositions), len(changes.TripUpdates), len(changes.StopTimeUpdates), len(changes.Alerts))
+	return nil
 }
 
-func initializeSqliteDb(logger log.Interface, sqliteDbPath string, logLevel log.Level) (*gorm.DB, error) {
-	logger.Info("Initializing SQLite database at path: %s", sqliteDbPath)
-	db, err := InitializeSqliteDatabase(sqliteDbPath, logLevel)
-	if err != nil {
-		return nil, err
-	}
-	logger.Info("Done initializing SQLite database at path: %s", sqliteDbPath)
-	return db, nil
-}
-
-func doesFeedAlreadyExist(feed *model.GtfsStaticFeed, db *gorm.DB) (bool, error) {
+func doesFeedAlreadyExist(ctx context.Context, feed *model.GtfsStaticFeed, db *gorm.DB) (bool, error) {
 	var count int64
-	result := db.Model(&model.FeedInfo{}).Where("version = ?", feed.FeedInfo.Version).Count(&count)
+	result := db.WithContext(ctx).Model(&model.FeedInfo{}).Where("version = ?", feed.FeedInfo.Version).Count(&count)
 	return count > 0, result.Error
 }

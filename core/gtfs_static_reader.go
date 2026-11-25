@@ -3,9 +3,11 @@ package core
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"hash"
 	"io"
 	"net/http"
@@ -20,15 +22,19 @@ import (
 	"gorm.io/gorm"
 )
 
-func ParseStaticGtfsFromUrl(url string) (*model.GtfsStaticFeed, error) {
-	resp, err := http.Get(url)
+func ParseStaticGtfsFromUrl(ctx context.Context, client *http.Client, url string) (*model.GtfsStaticFeed, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("Non-successful response from uri " + url)
+		return nil, fmt.Errorf("GET %s: unexpected status %s", url, resp.Status)
 	}
 
 	tempFile, err := os.CreateTemp(os.TempDir(), "google_transit*.zip")
