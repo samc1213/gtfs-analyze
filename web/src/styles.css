@@ -1,0 +1,663 @@
+:root {
+  /* Palette */
+  --ink: #1b2430;
+  --ink-muted: #5b6774;
+  --ink-faint: #8a96a3;
+  --plains: #eef1f4;
+  --rule: #d5dce3;
+  --paper: #ffffff;
+  --rtd-blue: #0076ce;
+  --signal-amber: #f2a900;
+  --late: #b42318;
+  --on-time: #2e7d32;
+
+  --panel-shadow: 0 1px 2px rgba(27, 36, 48, 0.14), 0 0 0 1px rgba(27, 36, 48, 0.06);
+  --radius: 6px;
+
+  font-family: "Overpass Variable", "Overpass", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--plains);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rtd-blue);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+/* Layout: map above, timeline below; panels float over the map */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+.map {
+  flex: 1;
+  min-height: 0;
+}
+
+.topbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 8px 8px 14px;
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  max-width: calc(100% - 80px);
+  z-index: 2;
+}
+
+.agency {
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toggle input {
+  accent-color: var(--rtd-blue);
+  margin: 0;
+}
+
+.text-button {
+  border: none;
+  background: none;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--rtd-blue);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.text-button:hover {
+  background: var(--plains);
+}
+
+/* Route picker */
+
+.route-picker {
+  position: relative;
+}
+
+.route-search {
+  width: 280px;
+  padding: 7px 10px 5px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--plains);
+  font-size: 14px;
+}
+
+.route-search::placeholder {
+  color: var(--ink-faint);
+}
+
+.route-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 340px;
+  max-height: min(60vh, 440px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow), 0 8px 24px rgba(27, 36, 48, 0.12);
+}
+
+.route-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.route-option.highlighted {
+  background: var(--plains);
+}
+
+.route-empty {
+  padding: 8px;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.route-chosen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.route-chosen-name {
+  font-weight: 650;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-badge {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 34px;
+  padding: 3px 6px 1px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+}
+
+/* Trip panel */
+
+.trip-panel {
+  position: absolute;
+  top: 74px;
+  left: 12px;
+  bottom: 136px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow);
+  z-index: 1;
+  overflow: hidden;
+}
+
+.trip-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 10px 0 16px;
+}
+
+.trip-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.trip-title h2 {
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  padding-top: 1px;
+}
+
+.trip-vehicle {
+  padding: 4px 16px 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.trip-delay {
+  padding: 10px 16px 12px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  border-bottom: 1px solid var(--rule);
+}
+
+.trip-delay.late {
+  color: var(--late);
+}
+
+.trip-delay.on-time {
+  color: var(--on-time);
+}
+
+.trip-delay.early,
+.trip-delay.unknown {
+  color: var(--ink);
+}
+
+.trip-delay.unknown {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.trip-message {
+  padding: 12px 16px;
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+/* The stop list is drawn as the line itself: a strip in the route color with a dot per stop */
+
+.stop-list {
+  --dot-x: 22px;
+  list-style: none;
+  margin: 0;
+  padding: 8px 0 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.stop {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px 4px 44px;
+  font-size: 14px;
+}
+
+.stop::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--dot-x) - 2px);
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--route-color);
+}
+
+.stop:first-child::before {
+  top: 50%;
+}
+
+.stop:last-child::before {
+  bottom: 50%;
+}
+
+.stop::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--dot-x) - 5px);
+  top: calc(50% - 5px);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2.5px solid var(--route-color);
+  box-sizing: border-box;
+}
+
+.stop.passed {
+  color: var(--ink-faint);
+}
+
+.stop.passed::before {
+  background: var(--rule);
+}
+
+.stop.passed::after {
+  border-color: var(--rule);
+}
+
+.stop.next {
+  font-weight: 750;
+}
+
+.stop.next::after {
+  width: 16px;
+  height: 16px;
+  left: calc(var(--dot-x) - 8px);
+  top: calc(50% - 8px);
+  border: 4px solid var(--signal-amber);
+}
+
+.stop.skipped .stop-name {
+  text-decoration: line-through;
+  color: var(--ink-faint);
+}
+
+.stop-times {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+  color: inherit;
+}
+
+.stop-times .scheduled {
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.predicted.late {
+  color: var(--late);
+}
+
+.predicted.early {
+  color: var(--ink);
+}
+
+.stop.passed .predicted {
+  color: inherit;
+}
+
+/* Notices for empty and error states */
+
+.notice {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, calc(100% - 32px));
+  padding: 18px 20px;
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: var(--panel-shadow), 0 8px 24px rgba(27, 36, 48, 0.12);
+  z-index: 3;
+}
+
+.notice h2 {
+  font-size: 18px;
+  font-weight: 750;
+  margin-bottom: 6px;
+}
+
+.notice p {
+  color: var(--ink-muted);
+}
+
+/* Timeline */
+
+.timebar {
+  flex-shrink: 0;
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  padding: 10px 16px 12px;
+  z-index: 2;
+}
+
+.timebar-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 8px;
+}
+
+.clock {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 330px;
+}
+
+.clock-time {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.clock-date {
+  font-size: 14px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.play-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.speeds {
+  display: flex;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.speeds button {
+  border: none;
+  background: var(--paper);
+  padding: 5px 10px 3px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.speeds button + button {
+  border-left: 1px solid var(--rule);
+}
+
+.speeds button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.speeds button:disabled {
+  color: var(--ink-faint);
+  background: var(--paper);
+  cursor: default;
+}
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 2px;
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--ink);
+}
+
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--signal-amber);
+  margin-top: -2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .live-dot {
+    animation: live-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes live-pulse {
+  50% {
+    box-shadow: 0 0 0 5px rgba(242, 169, 0, 0.25);
+  }
+}
+
+.go-live {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  border-radius: 4px;
+  padding: 5px 10px 3px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.go-live:hover,
+.speeds button:not(:disabled):not([aria-pressed="true"]):hover {
+  background: var(--plains);
+}
+
+.status {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.ribbon-track {
+  position: relative;
+  height: 58px;
+  border-radius: 4px;
+  background: var(--plains);
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.ribbon-bars {
+  position: absolute;
+  inset: 4px 0 18px;
+  width: 100%;
+  height: calc(100% - 22px);
+}
+
+.bar {
+  fill: var(--rtd-blue);
+  opacity: 0.22;
+}
+
+.bar-past {
+  opacity: 0.6;
+}
+
+.ribbon-tick {
+  position: absolute;
+  bottom: 2px;
+  padding-left: 4px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  border-left: 1px solid var(--rule);
+  line-height: 14px;
+  pointer-events: none;
+}
+
+.playhead {
+  position: absolute;
+  top: -4px;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--signal-amber);
+  pointer-events: none;
+}
+
+.playhead::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--signal-amber);
+  box-shadow: 0 0 0 2px var(--paper);
+}
+
+/* MapLibre controls sit clear of the top bar */
+.maplibregl-ctrl-top-right {
+  top: 4px;
+}
+
+/* Small screens: top bar stacks, trip panel becomes a sheet above the timeline */
+
+@media (max-width: 760px) {
+  .topbar {
+    left: 8px;
+    right: 56px;
+    top: 8px;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    max-width: none;
+  }
+
+  .agency {
+    width: 100%;
+  }
+
+  .route-search,
+  .route-list {
+    width: 100%;
+  }
+
+  .route-picker {
+    flex: 1;
+    min-width: 180px;
+  }
+
+  .trip-panel {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 152px;
+    width: auto;
+    max-height: 42vh;
+  }
+
+  .timebar-row {
+    flex-wrap: wrap;
+    gap: 8px 16px;
+  }
+
+  .clock {
+    min-width: 0;
+  }
+
+  .clock-time {
+    font-size: 24px;
+  }
+
+  .status {
+    margin-left: 0;
+  }
+}

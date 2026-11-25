@@ -6,7 +6,7 @@ Right now, `gtfs-analyze` has three commands:
 
 * `store` - watch an agency's GTFS static and GTFS-RT feeds (vehicle positions, trip updates, alerts), and log the changes to a SQLite database
 * `calculate otp` - calculate the on-time performance of an agency based on the data logged in the `store` command
-* `serve` - serve the stored data as a read-only JSON API (see [API](#api))
+* `serve` - serve the stored data as a JSON API for the [web UI](#web-ui)
 
 
 Agencies and their feeds are listed in [`agencies.yaml`](agencies.yaml). Each agency has a short id we assign (e.g. `rtd`), and each feed has its URL, a link to the agency's terms of use, and optionally its [Mobility Database](https://mobilitydatabase.org) id. Feeds that need an API key can reference environment variables (`${NAME}`) in the URL or in `headers`. The file's header comment documents every field.
@@ -36,14 +36,19 @@ This will print a table with the on-time performance per trip. You can configure
 
 For help, try `gtfs-analyze --help`.
 
-## API
-`gtfs-analyze serve` serves the stored data as a read-only JSON API under `/api`. It only reads, so it can run alongside `store` on the same database:
+## Web UI
+[`web/`](web/) is a live map of every vehicle, with replay of everything stored. Pick a route to show only its vehicles, click a vehicle to see its trip: each stop's scheduled and predicted arrival, and how late it's running. Drag the timeline at the bottom to go back in time, and play at 1×, 10× or 60×.
+
+It reads from a small read-only API served by `gtfs-analyze serve`, which can run alongside `store` on the same database:
 
 ```bash
-$ gtfs-analyze serve --db-path ~/Downloads/rtd.db    # http://localhost:8080/api
+$ gtfs-analyze serve --db-path ~/Downloads/rtd.db          # API on http://localhost:8080/api
+$ cd web && npm install && npm run dev                      # UI on http://localhost:5173
 ```
 
-Endpoints: `/api/meta`, `/api/routes`, `/api/network` (route lines as GeoJSON, from the feed's `shapes.txt`), `/api/positions?from=&to=`, `/api/activity?from=&to=` and `/api/trips/{tripId}?date=&at=` (a trip's stops with scheduled and predicted arrivals as of a point in time). Static feeds stored before shapes were parsed have no route lines until the agency publishes a new version.
+The dev server proxies `/api` to `localhost:8080`; set `GTFS_API_URL` to point it elsewhere. For a deployed build (`npm run build`), set `VITE_API_BASE` to the API's origin, and `serve --allow-origin` to the UI's origin. The basemap is [OpenFreeMap](https://openfreemap.org) (no API key); set `VITE_MAP_STYLE` to use another MapLibre style.
+
+Route lines come from the feed's `shapes.txt`. Static feeds stored before shapes were parsed have no lines on the map until the agency publishes a new version (or you start a fresh database).
 
 ## Building
 Building requires Go and [`protoc`](https://github.com/protocolbuffers/protobuf/releases), which generates the GTFS-RT bindings:
@@ -59,7 +64,8 @@ No C compiler is needed: SQLite access uses a pure-Go driver.
 ## Packages
 * **[core](core/)**: All the core logic and database interaction of the tool
 * **[config](config/)**: Loads and validates `agencies.yaml`
-* **[api](api/)**: The read-only JSON API served by `gtfs-analyze serve`
+* **[api](api/)**: The read-only JSON API behind the web UI
+* **[web](web/)**: The web UI (React, TypeScript, MapLibre)
 * **[model](model/)**: The GTFS data model
 * **[csv_parse](csv_parse/)**: CSV parser. An excuse to learn about reflection in go
 * **[log](log/)**: A wrapper around go's standard `log` package
