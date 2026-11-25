@@ -17,7 +17,8 @@ func InitializeSqliteDatabase(databasePath string, logLevel log.Level) (*gorm.DB
 	innerLogger := logger.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags), loggerConfig)
 	// The static and realtime feeds are written from separate goroutines. busy_timeout makes
 	// a writer wait for another's lock instead of failing with "database is locked".
-	db, err := gorm.Open(sqlite.Open(databasePath+"?_pragma=busy_timeout(30000)"), &gorm.Config{Logger: innerLogger})
+	// WAL lets `serve` (or `calculate otp`) read while `store` is writing.
+	db, err := gorm.Open(sqlite.Open(databasePath+"?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)"), &gorm.Config{Logger: innerLogger})
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +80,9 @@ func WriteStaticGtfsFeedToDatabase(ctx context.Context, feed *model.GtfsStaticFe
 			return err
 		}
 		if err := insertAll(tx, feed.Calendar); err != nil {
+			return err
+		}
+		if err := insertAll(tx, feed.Shape); err != nil {
 			return err
 		}
 		// FeedInfo is written last: its presence marks the feed as fully stored

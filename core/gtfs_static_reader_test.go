@@ -20,5 +20,8 @@ func TestParseRtdStatic(t *testing.T) {
 	assert.Equal(t, 1, len(staticFeed.Agency))
 	assert.Equal(t, "Regional Transportation District", staticFeed.Agency[0].Name)
 	assert.Equal(t, 19, len(staticFeed.Calendar))
-	assert.Equal(t, "ca084dac096878a7d8fbf6f3f7dc1203", staticFeed.FeedInfo.Version)
+	// No feed_info.txt in this feed, so the version is a hash of its files (including shapes.txt)
+	assert.Equal(t, "b1e1d2cc3b5fe6b84fb20d75d7f4beb9", staticFeed.FeedInfo.Version)
+	assert.NotEmpty(t, staticFeed.Shape)
+	assert.Equal(t, staticFeed.FeedInfo.Version, staticFeed.Shape[0].Version)
 }

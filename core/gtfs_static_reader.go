@@ -223,6 +223,17 @@ func parseStaticGtfsFromFiles(files *GtfsFileCollection) (*model.GtfsStaticFeed,
 			}
 			result.Calendar = calendars
 		}
+		if strings.ToLower(f.Name) == "shapes.txt" {
+			shapes, err := parseSingleStaticFile[model.Shape](f.FileObj)
+			if err != nil {
+				return &result, err
+			}
+			err = updateHash(hash, f.FileObj)
+			if err != nil {
+				return &result, err
+			}
+			result.Shape = shapes
+		}
 		if strings.ToLower(f.Name) == "feed_info.txt" {
 			feedInfos, err := parseSingleStaticFile[model.FeedInfo](f.FileObj)
 			if err != nil {
@@ -280,6 +291,9 @@ func addVersionToAllObjects(feed *model.GtfsStaticFeed, version string) {
 	}
 	for i := range feed.Calendar {
 		feed.Calendar[i].Version = version
+	}
+	for i := range feed.Shape {
+		feed.Shape[i].Version = version
 	}
 }
 

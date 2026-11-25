@@ -1,6 +1,6 @@
 module github.com/samc1213/gtfs-analyze
 
-go 1.19
+go 1.22
 
 require (
 	github.com/spf13/cobra v1.7.0

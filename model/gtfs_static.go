@@ -233,6 +233,18 @@ type Calendar struct {
 	EndDate   time.Time        `csv_parse:"end_date;timeLayout:20060102" gorm:"not null;default:null"`
 }
 
+// A point on a trip's path, from shapes.txt
+type Shape struct {
+	Version   string    `gorm:"primaryKey;not null;default:null"`
+	FeedInfo  *FeedInfo `gorm:"foreignKey:Version;belongsTo"`
+	Id        string    `csv_parse:"shape_id" gorm:"primaryKey;not null;default:null"`
+	Sequence  int32     `csv_parse:"shape_pt_sequence" gorm:"primaryKey;not null"`
+	Latitude  float64   `csv_parse:"shape_pt_lat"`
+	Longitude float64   `csv_parse:"shape_pt_lon"`
+	// Distance from the first point, in the feed's units. 0 when the feed omits it.
+	DistTraveled float64 `csv_parse:"shape_dist_traveled;default:0"`
+}
+
 type FeedInfo struct {
 	PublisherName   string    `csv_parse:"feed_publisher_name" gorm:"default:null"`
 	PublisherUrl    string    `csv_parse:"feed_publisher_url" gorm:"default:null"`
@@ -256,6 +268,7 @@ type GtfsStaticFeed struct {
 	Trip     []Trip
 	StopTime []StopTime
 	Calendar []Calendar
+	Shape    []Shape
 	FeedInfo FeedInfo
 }
 
@@ -267,6 +280,7 @@ func GetAllModels() []interface{} {
 		&Trip{},
 		&StopTime{},
 		&Calendar{},
+		&Shape{},
 		&FeedInfo{},
 		&VehiclePosition{},
 		&TripUpdate{},
