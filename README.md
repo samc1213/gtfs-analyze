@@ -36,15 +36,16 @@ This will print a table with the on-time performance per trip. You can configure
 For help, try `gtfs-analyze --help`.
 
 ## Building
-Building requires Go and [`protoc`](https://github.com/protocolbuffers/protobuf/releases), which generates the GTFS-RT bindings:
+Building requires only Go:
 
 ```bash
-$ ./gtfs_realtime/generate.sh
 $ go build -o build/ .
 $ go test ./...
 ```
 
 No C compiler is needed: SQLite access uses a pure-Go driver.
+
+The GTFS-RT bindings in `gtfs_realtime/` are generated from `gtfs-realtime.proto` and committed. To regenerate them after updating the proto, install [`protoc`](https://github.com/protocolbuffers/protobuf/releases) and run `./gtfs_realtime/generate.sh`.
 
 ## Packages
 * **[core](core/)**: All the core logic and database interaction of the tool
