@@ -43,3 +43,6 @@ No C compiler is needed: SQLite access uses a pure-Go driver.
 * **[csv_parse](csv_parse/)**: CSV parser. An excuse to learn about reflection in go
 * **[log](log/)**: A wrapper around go's standard `log` package
 * **[cmd](cmd/)**: All the entry commands for the CLI tool. Created by [cobra](https://github.com/spf13/cobra)
+
+## License
+[GNU Affero General Public License v3.0](LICENSE). If you run a modified version as a network service, you must offer its users the modified source. `gtfs_realtime/gtfs-realtime.proto` is from Google and stays under the Apache License 2.0.
