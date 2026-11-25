@@ -12,6 +12,7 @@ import (
 )
 
 var DbPath string
+var ArchiveDir string
 var ConfigPath string
 var AgencyIds []string
 var RtPollIntervalSecs uint
@@ -21,9 +22,17 @@ var StaticPollIntervalMins uint
 var storeCmd = &cobra.Command{
 	Use:   "store",
 	Short: "Stores GTFS and GTFS-RT feeds to a database",
-	Long: `The store command saves an agency's static GTFS and GTFS-RT feeds into a SQLite
-database for further analysis. Agencies and their feed URLs are listed in a config
-file (see agencies.yaml); a database holds one agency, chosen with --agency.
+	Long: `The store command collects agencies' static GTFS and GTFS-RT feeds. Agencies and
+their feed URLs are listed in a config file (see agencies.yaml); --agency picks
+which to collect. At least one of --archive-dir and --db-path is required.
+
+--archive-dir keeps each distinct raw download exactly as received, for any
+number of agencies: realtime snapshots gzipped under <agency>/<feed>/YYYY/MM/DD/,
+static zips under <agency>/<feed>/. It is written before the database, so the
+database can always be rebuilt from it.
+
+--db-path parses the feeds into a SQLite database for analysis. A database holds
+one agency.
 
 Each new static feed version is stored in full. Realtime feeds are stored as a
 history of changes: a row is written only when a vehicle position, stop prediction,
@@ -50,6 +59,7 @@ to fetch that feed once and exit.`,
 
 		return core.Store(ctx, core.StoreConfig{
 			DbPath:             DbPath,
+			ArchiveDir:         ArchiveDir,
 			Agencies:           agencies,
 			StaticPollInterval: time.Duration(StaticPollIntervalMins) * time.Minute,
 			RtPollInterval:     time.Duration(RtPollIntervalSecs) * time.Second,
@@ -61,8 +71,8 @@ to fetch that feed once and exit.`,
 func init() {
 	rootCmd.AddCommand(storeCmd)
 
-	storeCmd.Flags().StringVar(&DbPath, "db-path", "", "The path to a local SQLite database for logging")
-	storeCmd.MarkFlagRequired("db-path")
+	storeCmd.Flags().StringVar(&DbPath, "db-path", "", "The path to a local SQLite database for parsed feed data")
+	storeCmd.Flags().StringVar(&ArchiveDir, "archive-dir", "", "A directory to archive every raw feed download in (gzipped GTFS-RT snapshots and static zips)")
 	storeCmd.Flags().StringVar(&ConfigPath, "config", "agencies.yaml", "The config file listing agencies and their feeds")
 	storeCmd.Flags().StringSliceVar(&AgencyIds, "agency", nil, "Ids of the agencies to store, e.g. rtd (default: every agency in the config)")
 	storeCmd.Flags().UintVar(&RtPollIntervalSecs, "rt-poll-interval", 30, "How often to poll the GTFS-RT feeds, in seconds (0 = fetch once)")
