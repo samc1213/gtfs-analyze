@@ -265,7 +265,7 @@ func (calculation *OtpCalculation) onNewPositionData(positionData []InternalVehi
 // for anything after midnight UTC
 func (calculation *OtpCalculation) inferTripDate(position *InternalVehiclePosition) infra.Date {
 	y, m, d := position.PositionTime.Date()
-	return infra.Date{y, m, d}
+	return infra.Date{Year: y, Month: m, Day: d}
 }
 
 func (calculation *OtpCalculation) OnNewPositionData(positionData []model.VehiclePosition, logger log.Interface) {

@@ -59,25 +59,25 @@ type logger struct {
 
 func (logger *logger) Debug(format string, v ...any) {
 	if logger.debug != nil {
-		logger.debug.Output(3, fmt.Sprintf(format, v...))
+		logger.debug.Output(2, fmt.Sprintf(format, v...))
 	}
 }
 
 func (logger *logger) Info(format string, v ...any) {
 	if logger.info != nil {
-		logger.info.Output(3, fmt.Sprintf(format, v...))
+		logger.info.Output(2, fmt.Sprintf(format, v...))
 	}
 }
 
 func (logger *logger) Warning(format string, v ...any) {
 	if logger.warning != nil {
-		logger.warning.Output(3, fmt.Sprintf(format, v...))
+		logger.warning.Output(2, fmt.Sprintf(format, v...))
 	}
 }
 
 func (logger *logger) Error(format string, v ...any) {
 	if logger.error != nil {
-		logger.error.Output(3, fmt.Sprintf(format, v...))
+		logger.error.Output(2, fmt.Sprintf(format, v...))
 	}
 }
 
