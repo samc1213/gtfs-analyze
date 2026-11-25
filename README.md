@@ -4,17 +4,26 @@ gtfs-analyze is a command line tool to analyze General Transit Feed Specificatio
 ## Usage
 Right now, `gtfs-analyze` has two commands: 
 
-* `store` - watch a GTFS static feed and a GTFS-RT live feed, and log the changes to a SQLite database
+* `store` - watch a GTFS static feed and GTFS-RT feeds (vehicle positions, trip updates, alerts), and log the changes to a SQLite database
 * `calculate otp` - calculate the on-time performance of an agency based on the data logged in the `store` command
 
 
 To start storing data for Denver's RTD system, we would run a command like this:
 
 ```bash
-$ gtfs-analyze --log-level info store --db-path ~/Downloads/rtd.db --static-url https://www.rtd-denver.com/files/gtfs/google_transit.zip --vehicle-pos-url https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb
+$ gtfs-analyze --log-level info store \
+    --db-path ~/Downloads/rtd.db \
+    --static-url https://www.rtd-denver.com/files/gtfs/google_transit.zip \
+    --vehicle-pos-url https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb \
+    --trip-updates-url https://www.rtd-denver.com/files/gtfs-rt/TripUpdate.pb \
+    --alerts-url https://www.rtd-denver.com/files/gtfs-rt/Alerts.pb
 ```
 
-This will download the static GTFS dataset at the provided `static-url` and parse it into a SQLite database at the provided `db-path`. It will also download the GTFS-RT dataset at the provided `vehicle-pos-url`. If the dataset is already found in the database, nothing will happen. Hence, you can run this command to "watch" a GTFS feed, and keep all the historical data downloaded in a database. The poll intervals are configured by the `--rt-poll-interval` and `--static-poll-interval` options.
+This runs until interrupted (Ctrl+C or SIGTERM), polling the static feed every `--static-poll-interval` minutes (default 60) and the realtime feeds every `--rt-poll-interval` seconds (default 30). A failed fetch is logged and retried on the next interval. Set an interval to `0` to fetch that feed once and exit.
+
+What gets stored:
+* **Static GTFS**: each new feed version is stored in full, keyed by `feed_info.txt`'s `feed_version` (or a hash of the feed files if there is none). Versions already in the database are skipped.
+* **GTFS-RT**: stored as a history of changes rather than a copy of every snapshot. A row is written to `vehicle_positions`, `trip_updates`, `stop_time_updates` or `alerts` only when that vehicle, trip, stop prediction or alert changed since the previous snapshot. `message_timestamp` on each row is the feed snapshot in which the change was seen. Change detection is kept in memory, so the first snapshot after a restart is stored in full.
 
 Then, in another process, we can analyze the on-time performance in the system for a given timerange:
 
