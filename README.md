@@ -4,20 +4,19 @@ gtfs-analyze is a command line tool to analyze General Transit Feed Specificatio
 ## Usage
 Right now, `gtfs-analyze` has two commands: 
 
-* `store` - watch a GTFS static feed and GTFS-RT feeds (vehicle positions, trip updates, alerts), and log the changes to a SQLite database
+* `store` - watch an agency's GTFS static and GTFS-RT feeds (vehicle positions, trip updates, alerts), and log the changes to a SQLite database
 * `calculate otp` - calculate the on-time performance of an agency based on the data logged in the `store` command
 
 
-To start storing data for Denver's RTD system, we would run a command like this:
+Agencies and their feeds are listed in [`agencies.yaml`](agencies.yaml). Each agency has a short id we assign (e.g. `rtd`), and each feed has its URL, a link to the agency's terms of use, and optionally its [Mobility Database](https://mobilitydatabase.org) id. Feeds that need an API key can reference environment variables (`${NAME}`) in the URL or in `headers`. The file's header comment documents every field.
+
+To start storing data for Denver's RTD system:
 
 ```bash
-$ gtfs-analyze --log-level info store \
-    --db-path ~/Downloads/rtd.db \
-    --static-url https://www.rtd-denver.com/files/gtfs/google_transit.zip \
-    --vehicle-pos-url https://www.rtd-denver.com/files/gtfs-rt/VehiclePosition.pb \
-    --trip-updates-url https://www.rtd-denver.com/files/gtfs-rt/TripUpdate.pb \
-    --alerts-url https://www.rtd-denver.com/files/gtfs-rt/Alerts.pb
+$ gtfs-analyze --log-level info store --agency rtd --db-path ~/Downloads/rtd.db
 ```
+
+`--config` points at a different config file (default `agencies.yaml`). A SQLite database holds one agency.
 
 This runs until interrupted (Ctrl+C or SIGTERM), polling the static feed every `--static-poll-interval` minutes (default 60) and the realtime feeds every `--rt-poll-interval` seconds (default 30). A failed fetch is logged and retried on the next interval. Set an interval to `0` to fetch that feed once and exit.
 
@@ -48,6 +47,7 @@ No C compiler is needed: SQLite access uses a pure-Go driver.
 
 ## Packages
 * **[core](core/)**: All the core logic and database interaction of the tool
+* **[config](config/)**: Loads and validates `agencies.yaml`
 * **[model](model/)**: The GTFS data model
 * **[csv_parse](csv_parse/)**: CSV parser. An excuse to learn about reflection in go
 * **[log](log/)**: A wrapper around go's standard `log` package
