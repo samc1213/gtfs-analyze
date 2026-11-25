@@ -95,7 +95,6 @@ func newTestServer(t *testing.T) (http.Handler, *gorm.DB) {
 		{EntityId: "bus1", VehicleLabel: "6001", TripId: "T1", RouteId: "15", StartDate: serviceDate, Latitude: 39.74, Longitude: -104.97, PositionTimestamp: uint64(localTime(8, 6)), MessageTimestamp: uint64(localTime(8, 6))},
 		{EntityId: "bus2", TripId: "T9", RouteId: "0", Latitude: 39.70, Longitude: -104.98, PositionTimestamp: uint64(localTime(8, 6)), MessageTimestamp: uint64(localTime(8, 6))},
 	}
-	require.NoError(t, db.Create(&positions).Error)
 
 	// Stop B: predicted on time at 8:00, then 3 minutes late at 8:05
 	updates := []model.StopTimeUpdate{
@@ -103,7 +102,7 @@ func newTestServer(t *testing.T) (http.Handler, *gorm.DB) {
 		{TripId: "T1", StartDate: serviceDate, StopSequence: ptr(uint32(2)), StopId: "B", ArrivalTime: ptr(localTime(8, 13)), MessageTimestamp: uint64(localTime(8, 5))},
 		{TripId: "T1", StartDate: serviceDate, StopSequence: ptr(uint32(3)), StopId: "C", ScheduleRelationship: model.StopSkipped, MessageTimestamp: uint64(localTime(8, 5))},
 	}
-	require.NoError(t, db.Create(&updates).Error)
+	require.NoError(t, core.WriteRtChangesToDatabase(context.Background(), &core.RtChanges{VehiclePositions: positions, StopTimeUpdates: updates}, db))
 
 	return NewServer(db, log.New(log.Silent), "*"), db
 }
