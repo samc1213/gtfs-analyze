@@ -36,10 +36,6 @@ func InitializeSqliteDatabase(databasePath string, logLevel log.Level) (*gorm.DB
 	}
 	sqlDb.SetMaxOpenConns(1)
 
-	if err := migrateLegacyVehiclePositions(db); err != nil {
-		return nil, err
-	}
-
 	// Migrate the schema
 	err = db.AutoMigrate(model.GetAllModels()...)
 	if err != nil {
@@ -47,31 +43,6 @@ func InitializeSqliteDatabase(databasePath string, logLevel log.Level) (*gorm.DB
 	}
 
 	return db, nil
-}
-
-// Databases created before vehicle_positions had an auto-increment key used the feed
-// entity id as the primary key, which kept only the latest position per vehicle.
-// That table can't be migrated in place, so set it aside and let AutoMigrate create the new one.
-func migrateLegacyVehiclePositions(db *gorm.DB) error {
-	migrator := db.Migrator()
-	if !migrator.HasTable(&model.VehiclePosition{}) || migrator.HasColumn(&model.VehiclePosition{}, "EntityId") {
-		return nil
-	}
-	if migrator.HasTable("vehicle_positions_legacy") {
-		if err := migrator.DropTable("vehicle_positions_legacy"); err != nil {
-			return err
-		}
-	}
-	if err := migrator.RenameTable("vehicle_positions", "vehicle_positions_legacy"); err != nil {
-		return err
-	}
-	// Indexes keep their names after a rename and would collide with the new table's indexes
-	for _, index := range []string{"idx_vehicle_positions_message_timestamp", "idx_vehicle_positions_position_timestamp"} {
-		if err := db.Exec("DROP INDEX IF EXISTS " + index).Error; err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func getGormLogLevel(logLevel log.Level) logger.LogLevel {

@@ -76,34 +76,6 @@ func TestWriteTripUpdatesAndAlerts(t *testing.T) {
 	require.Len(t, alert.ActivePeriods, 1)
 }
 
-func TestLegacyVehiclePositionsTableIsSetAside(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "legacy.db")
-	legacy, err := InitializeSqliteDatabase(dbPath, log.Silent)
-	require.NoError(t, err)
-	// Recreate the old schema, keyed by entity id
-	require.NoError(t, legacy.Exec("DROP TABLE vehicle_positions").Error)
-	require.NoError(t, legacy.Exec("CREATE TABLE vehicle_positions (id text NOT NULL, message_timestamp integer, PRIMARY KEY (id))").Error)
-	require.NoError(t, legacy.Exec("CREATE INDEX idx_vehicle_positions_message_timestamp ON vehicle_positions(message_timestamp)").Error)
-	require.NoError(t, legacy.Exec("INSERT INTO vehicle_positions VALUES ('1502', 1)").Error)
-	closeDb(legacy, log.New(log.Silent))
-
-	db, err := InitializeSqliteDatabase(dbPath, log.Silent)
-	require.NoError(t, err)
-
-	assert.True(t, db.Migrator().HasColumn(&model.VehiclePosition{}, "EntityId"))
-	var legacyRows int64
-	require.NoError(t, db.Table("vehicle_positions_legacy").Count(&legacyRows).Error)
-	assert.EqualValues(t, 1, legacyRows)
-
-	// Re-opening a migrated database leaves it alone
-	closeDb(db, log.New(log.Silent))
-	reopened, err := InitializeSqliteDatabase(dbPath, log.Silent)
-	require.NoError(t, err)
-	defer closeDb(reopened, log.New(log.Silent))
-	require.NoError(t, reopened.Table("vehicle_positions_legacy").Count(&legacyRows).Error)
-	assert.EqualValues(t, 1, legacyRows)
-}
-
 func TestWriteStaticFeedInBatches(t *testing.T) {
 	if testing.Short() {
 		t.Skip("writes a full RTD feed; takes ~1 minute")
